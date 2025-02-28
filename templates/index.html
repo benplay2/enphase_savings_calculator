@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation</title>
+</head>
+<body>
+    <h1>Run Simulation</h1>
+    <input type="number" id="param" value="10">
+    <button onclick="runSimulation()">Simulate</button>
+    <p id="result"></p>
+
+    <script>
+        function runSimulation() {
+            const param = document.getElementById("param").value;
+            fetch("/simulate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ param: parseInt(param) })
+            })
+            .then(response => response.json())
+            .then(data => document.getElementById("result").innerText = "Result: " + data.result)
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+
+    <style>
+        .fetched-button {
+            background-color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Details about {{ system_dict['name'] }}</h1>
+
+    <p><a href="/logout">Logout</a> <a href="/dashboard">Dashboard</a></p>
+    
+    TODO: Show recent months and whether data is populated. Give button to populate data for that month.
+    <br>
+    TODO: Link to simulation page
+    <br>
+    TODO: Add option to upload report CSV
+
+    <div id="dataDownloadTable">
+        <table>
+            <tr>
+                <th>Weeks of Data Downloaded:</th>
+            </tr>
+            {% for week_item in week_populated_list %}
+            <tr>
+                <td>{{ week_item[0].strftime('%Y:%b-%d') }} <button class="querydatabutton{% if week_item[1] %} fetched-button{% endif %}" data-id="{{ week_item[0].timestamp() }}">{% if week_item[1] %}re-fetch{% else %}fetch{% endif %}</button></td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <script>
+        document.getElementById("dataDownloadTable").addEventListener("click", function(event) {
+            if (event.target.classList.contains("querydatabutton")) {
+                let itemId = event.target.getAttribute("data-id");
+        
+                fetch(`/fetchdata_week?start_at=${itemId}`)
+                .then(response => response.json())
+                .then(data => console.log(`Response for ID ${itemId}:`, data))
+                .then(response => {
+                    if (response.ok) {  // Checks if the response status is 200-299
+                        event.target.classList.add("fetched-button")
+                    }
+                })
+                .catch(error => console.error("Error:", error));
+            }
+        });
+    </script>
+
+</body>
+</html>

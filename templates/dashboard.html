@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+</head>
+<body>
+    <h1>Hello, {{ username }}!</h1>
+
+    <p><a href="/logout">Logout</a> <a href="/enphase_token">Re-Authorize</a></p>
+    
+    <h2>Select a System:</h2>
+    <ul>
+        {% for item in system_dict_list %}
+            <li><a href="/system?id={{ item['system_id'] }}">{{ item['name'] }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
