@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Parameters</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+
+<body class="container mt-4">
+
+    <p>Simulation for {{ system_name }}</p>
+    <p><a href="/logout">Logout</a> <a href="/dashboard">Dashboard</a></p>
+
+    <h2>Simulation Parameters</h2>
+    <form id="simulation-form" action="{{ url_for('simulate') }}" method="POST">
+        <input type="hidden" name="system_id" value="{{ system_id }}">
+        <!-- Module Count -->
+        <label for="module_count" class="form-label">Number of Solar Panels:</label>
+        <input type="number" class="form-control" name="module_count" value="{{ module_count }}" required>
+
+        <h4 class="mt-4">Battery Parameters</h4>
+        <label class="form-label">Usable Energy (kWh):</label>
+        <input type="number" step="0.01" class="form-control" name="batt_usable_energy_kwh"
+            value="{{ batt_usable_energy_kwh }}" required>
+
+        <label class="form-label">Charge Efficiency (0-1):</label>
+        <input type="number" step="0.01" class="form-control" name="batt_charge_eff" value="{{ batt_charge_eff }}"
+            required>
+
+        <label class="form-label">Discharge Efficiency (0-1):</label>
+        <input type="number" step="0.01" class="form-control" name="batt_discharge_eff" value="{{ batt_discharge_eff }}"
+            required>
+
+        <label class="form-label">Max C-Rate:</label>
+        <input type="number" step="0.01" class="form-control" name="batt_max_c_rate" value="{{ batt_max_c_rate }}"
+            required>
+
+        <h4 class="mt-4">Grid Parameters</h4>
+
+        <!-- Time Inputs -->
+        <div class="row mt-3">
+            <!-- Left Column: Start Times -->
+            <div class="col-md-6">
+                <label class="form-label">Weekday On-Peak Start:</label>
+                <input type="time" class="form-control" name="grid_weekday_on_peak_start"
+                    value="{{ grid_weekday_on_peak_start }}" required>
+
+                <label class="form-label">Weekend On-Peak Start:</label>
+                <input type="time" class="form-control" name="grid_weekend_on_peak_start"
+                    value="{{ grid_weekend_on_peak_start }}" required>
+            </div>
+
+            <!-- Right Column: End Times -->
+            <div class="col-md-6">
+                <label class="form-label">Weekday On-Peak End:</label>
+                <input type="time" class="form-control" name="grid_weekday_on_peak_end"
+                    value="{{ grid_weekday_on_peak_end }}" required>
+
+                <label class="form-label">Weekend On-Peak End:</label>
+                <input type="time" class="form-control" name="grid_weekend_on_peak_end"
+                    value="{{ grid_weekend_on_peak_end }}" required>
+            </div>
+        </div>
+
+
+        <hr>
+        <!-- Cost and Payment Inputs -->
+        <div class="row mt-3">
+            <!-- Left Column: Off-Peak -->
+            <div class="col-md-6">
+                <label class="form-label">Weekday Off-Peak Cost ($/kWh):</label>
+                <input type="number" step="0.01" class="form-control" name="grid_weekday_off_peak_cost_per_kwh"
+                    value="{{ grid_weekday_off_peak_cost_per_kwh }}" required>
+
+                <label class="form-label">Weekend Off-Peak Cost ($/kWh):</label>
+                <input type="number" step="0.01" class="form-control" name="grid_weekend_off_peak_cost_per_kwh"
+                    value="{{ grid_weekend_off_peak_cost_per_kwh }}" required>
+            </div>
+
+            <!-- Right Column: On-Peak -->
+            <div class="col-md-6">
+                <label class="form-label">Weekday On-Peak Cost ($/kWh):</label>
+                <input type="number" step="0.01" class="form-control" name="grid_weekday_on_peak_cost_per_kwh"
+                    value="{{ grid_weekday_on_peak_cost_per_kwh }}" required>
+
+                <label class="form-label">Weekend On-Peak Cost ($/kWh):</label>
+                <input type="number" step="0.01" class="form-control" name="grid_weekend_on_peak_cost_per_kwh"
+                    value="{{ grid_weekend_on_peak_cost_per_kwh }}" required>
+            </div>
+        </div>
+
+
+        <!-- Credits -->
+        <div class="row">
+            <div class="col-md-6">
+                <label for="grid_weekday_off_peak_gen_pay_per_kwh" class="form-label">Weekday Off-Peak Gen Credit
+                    ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_gen_pay_per_kwh"
+                    name="grid_weekday_off_peak_gen_pay_per_kwh" value="{{ grid_weekday_off_peak_gen_pay_per_kwh }}">
+            </div>
+            <div class="col-md-6">
+                <label for="grid_weekday_on_peak_gen_pay_per_kwh" class="form-label">Weekday On-Peak Gen Credit
+                    ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_gen_pay_per_kwh"
+                    name="grid_weekday_on_peak_gen_pay_per_kwh" value="{{ grid_weekday_on_peak_gen_pay_per_kwh }}">
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label for="grid_weekday_off_peak_creditable_per_kwh" class="form-label">Weekday Off-Peak Credit
+                    Redeemable ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_creditable_per_kwh"
+                    name="grid_weekday_off_peak_creditable_per_kwh"
+                    value="{{ grid_weekday_off_peak_creditable_per_kwh }}">
+            </div>
+            <div class="col-md-6">
+                <label for="grid_weekday_on_peak_creditable_per_kwh" class="form-label">Weekday On-Peak Credit
+                    Redeemable ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_creditable_per_kwh"
+                    name="grid_weekday_on_peak_creditable_per_kwh"
+                    value="{{ grid_weekday_on_peak_creditable_per_kwh }}">
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label for="grid_weekend_off_peak_gen_pay_per_kwh" class="form-label">Weekend Off-Peak Gen Credit
+                    ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_gen_pay_per_kwh"
+                    name="grid_weekend_off_peak_gen_pay_per_kwh" value="{{ grid_weekend_off_peak_gen_pay_per_kwh }}">
+            </div>
+            <div class="col-md-6">
+                <label for="grid_weekend_on_peak_gen_pay_per_kwh" class="form-label">Weekend On-Peak Gen Credit
+                    ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_gen_pay_per_kwh"
+                    name="grid_weekend_on_peak_gen_pay_per_kwh" value="{{ grid_weekend_on_peak_gen_pay_per_kwh }}">
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label for="grid_weekend_off_peak_creditable_per_kwh" class="form-label">Weekend Off-Peak Credit
+                    Redeemable ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_creditable_per_kwh"
+                    name="grid_weekend_off_peak_creditable_per_kwh"
+                    value="{{ grid_weekend_off_peak_creditable_per_kwh }}">
+            </div>
+            <div class="col-md-6">
+                <label for="grid_weekend_on_peak_creditable_per_kwh" class="form-label">Weekend On-Peak Credit
+                    Redeemable ($/kWh):</label>
+                <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_creditable_per_kwh"
+                    name="grid_weekend_on_peak_creditable_per_kwh"
+                    value="{{ grid_weekend_on_peak_creditable_per_kwh }}">
+            </div>
+        </div>
+
+        <hr>
+        <!-- Start and End Datetime Fields -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <label for="start_datetime" class="form-label">Start Datetime:</label>
+                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime"
+                    value="{{ start_datetime }}">
+            </div>
+            <div class="col-md-6">
+                <label for="end_datetime" class="form-label">End Datetime:</label>
+                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime"
+                    value="{{ end_datetime }}">
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <!-- Submit Button -->
+            <button type="submit" class="btn btn-primary mt-3">Simulate</button>
+        </div>
+    </form>
+
+    <!-- Results Section -->
+    <div id="results" class="mt-4">
+        {% if results %}
+        <h3>Simulation Results:</h3>
+        <pre>{{ results }}</pre>
+        {% endif %}
+    </div>
+
+</body>
+
+</html>

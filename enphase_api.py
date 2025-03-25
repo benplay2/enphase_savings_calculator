@@ -165,11 +165,12 @@ def get_all_system_summaries(token_dictionary: dict):
 
     return token_dictionary, system_dictionary_list
 
-def get_production_telemetry(token_dictionary: dict, system_id:int, granularity='day', start_at=None, start_date=None):
+def get_production_telemetry(token_dictionary: dict, system_id:int, granularity='week', start_at=None, start_date=None):
     token_dictionary = refresh_token_if_needed(token_dictionary)
     base_url = f"https://api.enphaseenergy.com/api/v4/systems/{system_id}/telemetry/production_meter"
     
     params = {
+        'granularity': granularity
         }
     if start_at is not None:
         params['start_at'] = start_at
@@ -202,11 +203,12 @@ def get_production_telemetry(token_dictionary: dict, system_id:int, granularity=
         print("Response content:", response.text)
     raise ValueError("Unable to get production data!")
     
-def get_consumption_telemetry(token_dictionary: dict, system_id:int, granularity='day', start_at=None, start_date=None):
+def get_consumption_telemetry(token_dictionary: dict, system_id:int, granularity='week', start_at=None, start_date=None):
     token_dictionary = refresh_token_if_needed(token_dictionary)
     base_url = f"https://api.enphaseenergy.com/api/v4/systems/{system_id}/telemetry/consumption_meter"
     
     params = {
+        'granularity': granularity
         }
     if start_at is not None:
         params['start_at'] = start_at
@@ -239,11 +241,12 @@ def get_consumption_telemetry(token_dictionary: dict, system_id:int, granularity
         print("Response content:", response.text)
     raise ValueError("Unable to get consumption data!")
 
-def get_battery_telemetry(token_dictionary: dict, system_id:int, granularity='day', start_at=None, start_date=None):
+def get_battery_telemetry(token_dictionary: dict, system_id:int, granularity='week', start_at=None, start_date=None):
     token_dictionary = refresh_token_if_needed(token_dictionary)
     base_url = f"https://api.enphaseenergy.com/api/v4/systems/{system_id}/telemetry/battery"
     
     params = {
+        'granularity': granularity
         }
     if start_at is not None:
         params['start_at'] = start_at
@@ -276,11 +279,12 @@ def get_battery_telemetry(token_dictionary: dict, system_id:int, granularity='da
         print("Response content:", response.text)
     raise ValueError("Unable to get battery data!")
     
-def get_energy_export_telemetry(token_dictionary: dict, system_id:int, granularity='day', start_at=None, start_date=None):
+def get_energy_export_telemetry(token_dictionary: dict, system_id:int, granularity='week', start_at=None, start_date=None):
     token_dictionary = refresh_token_if_needed(token_dictionary)
     base_url = f"https://api.enphaseenergy.com/api/v4/systems/{system_id}/energy_export_telemetry"
     
     params = {
+        'granularity': granularity
         }
     if start_at is not None:
         params['start_at'] = start_at
@@ -313,11 +317,12 @@ def get_energy_export_telemetry(token_dictionary: dict, system_id:int, granulari
         print("Response content:", response.text)
     raise ValueError("Unable to get energy export data!")
 
-def get_energy_import_telemetry(token_dictionary: dict, system_id:int, granularity='day', start_at=None, start_date=None):
+def get_energy_import_telemetry(token_dictionary: dict, system_id:int, granularity='week', start_at=None, start_date=None):
     token_dictionary = refresh_token_if_needed(token_dictionary)
     base_url = f"https://api.enphaseenergy.com/api/v4/systems/{system_id}/energy_import_telemetry"
     
     params = {
+        'granularity': granularity
         }
     if start_at is not None:
         params['start_at'] = start_at

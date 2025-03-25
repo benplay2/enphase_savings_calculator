@@ -11,7 +11,7 @@
     
     <h2>Select a System:</h2>
     <ul>
-        {% for item in system_dict_list %}
+        {% for item in system_detail_entries %}
             <li><a href="/system?id={{ item['system_id'] }}">{{ item['name'] }}</a></li>
         {% endfor %}
     </ul>

@@ -13,8 +13,25 @@
 <body>
     <h1>Details about {{ system_dict['name'] }}</h1>
 
-    <p><a href="/logout">Logout</a> <a href="/dashboard">Dashboard</a></p>
+    <p><a href="/logout">Logout</a> <a href="/dashboard">Dashboard</a> <a href="/simulation?system_id={{ system_id }}">Simulation</a></p>
     
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul>
+      {% for message in messages %}
+        <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+    <form id="uploadForm" action="/upload_enphase_energy_report" method="POST" enctype="multipart/form-data">
+        <input type="hidden" id="system_id" name="system_id" value="{{ system_id }}">
+        <input type="file" name="file" accept=".csv" required title="Choose a CSV file to upload">
+        <button type="submit">Upload energy report CSV</button>
+    </form>
+
+
     TODO: Show recent months and whether data is populated. Give button to populate data for that month.
     <br>
     TODO: Link to simulation page
@@ -28,26 +45,44 @@
             </tr>
             {% for week_item in week_populated_list %}
             <tr>
-                <td>{{ week_item[0].strftime('%Y:%b-%d') }} <button class="querydatabutton{% if week_item[1] %} fetched-button{% endif %}" data-id="{{ week_item[0].timestamp() }}">{% if week_item[1] %}re-fetch{% else %}fetch{% endif %}</button></td>
+                <td>{{ week_item[0].strftime('%Y:%b-%d') }} <button class="querydatabutton{% if week_item[1] %} fetched-button{% endif %}" data-id="{{ week_item[0].timestamp()|int }}">{% if week_item[1] %}re-fetch{% else %}fetch{% endif %}</button></td>
             </tr>
             {% endfor %}
         </table>
     </div>
 
     <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            const systemId = document.getElementById('system_id').value;
+            this.action = `/upload_enphase_energy_report?system_id=${systemId}`;
+        });
+    </script>
+
+    <script>
         document.getElementById("dataDownloadTable").addEventListener("click", function(event) {
             if (event.target.classList.contains("querydatabutton")) {
                 let itemId = event.target.getAttribute("data-id");
         
-                fetch(`/fetchdata_week?start_at=${itemId}`)
-                .then(response => response.json())
-                .then(data => console.log(`Response for ID ${itemId}:`, data))
+                let origText = event.target.innerText
+                event.target.innerText = "Fetching..."
+
+                fetch(`/fetchdata_week?start_at=${itemId}&system_id={{system_id}}`)
                 .then(response => {
+                    console.log(`Response for ID ${itemId}:`, response)
                     if (response.ok) {  // Checks if the response status is 200-299
                         event.target.classList.add("fetched-button")
+                        event.target.innerText = "re-fetch"
                     }
+                    else {
+                        event.target.innerText = origText
+                    }
+                    
                 })
-                .catch(error => console.error("Error:", error));
+                .catch(error => {
+                    console.error("Error:", error)
+
+                    event.target.innerText = origText
+                });
             }
         });
     </script>
