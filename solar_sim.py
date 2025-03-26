@@ -37,7 +37,6 @@ class PowerDevice(ABC):
         """
         pass
 
-    @abstractmethod
     def store_energy_transient(self, des_energy_wh) -> float:
         """
         Attempt to accept the energy specified to store 
@@ -45,7 +44,10 @@ class PowerDevice(ABC):
 
         Returns the energy accepted.
         """
-        pass
+        stored_wh = self.store_energy(des_energy_wh=des_energy_wh)
+        if stored_wh > 0:
+            self.get_energy(stored_wh)
+        return stored_wh
     
     @abstractmethod
     def get_energy(self, des_energy_wh) -> float:
@@ -61,11 +63,15 @@ class PowerDevice(ABC):
 class SolarArray(PowerDevice):
     def __init__(self, panel_num):
         self.panel_num = panel_num
-        self.generated_energy_wh = 0
+        self._generated_energy_wh = 0
         self.lifetime_energy_wh = 0
 
+    @property
+    def generated_energy_wh(self):
+        return self._generated_energy_wh
+
     def set_solar_generated_energy_wh(self, energy_per_panel_wh:float) -> float:
-        self.generated_energy_wh = energy_per_panel_wh * self.panel_num
+        self._generated_energy_wh = energy_per_panel_wh * self.panel_num
         return self.generated_energy_wh
 
     def get_generated_energy_wh(self) -> float:
@@ -75,7 +81,7 @@ class SolarArray(PowerDevice):
         """
         cur_produced_wh = self.generated_energy_wh
         self.lifetime_energy_wh += cur_produced_wh
-        self.generated_energy_wh = 0
+        self._generated_energy_wh = 0
         return cur_produced_wh
     
     def store_energy(self, des_energy_wh) -> float:
@@ -87,15 +93,12 @@ class SolarArray(PowerDevice):
         """
         return 0
     
-    def store_energy_transient(self, des_energy_wh) -> float:
-        return 0
-    
     def get_energy(self, des_energy_wh) -> float:
         """
         Return up to self.generated_energy_wh, reducing available energy by des_energy_wh
         """
         energy_provided = min(des_energy_wh, self.generated_energy_wh)
-        self.generated_energy_wh -= energy_provided
+        self._generated_energy_wh -= energy_provided
         self.lifetime_energy_wh += energy_provided
         return energy_provided
 
@@ -128,7 +131,7 @@ class Table1D():
 class SolarBattery(PowerDevice):
     def __init__(self, usable_energy_kwh, charge_eff=0.93, discharge_eff=0.9) -> None:
         self.usable_energy_kwh = usable_energy_kwh
-        self.stored_energy_kwh = usable_energy_kwh/2
+        self.stored_energy_wh = (usable_energy_kwh*1000)/2
         self.charge_eff = charge_eff
         self.discharge_eff = discharge_eff
         self.throughput_wh = 0
@@ -137,10 +140,11 @@ class SolarBattery(PowerDevice):
         self._cur_ts_discharge_wh = 0
         self._cur_ts_charge_wh = 0
         self._cur_ts = None
+        self.BATT_V = 125
     
     @property
     def soc(self):
-        return self.stored_energy_kwh/self.usable_energy_kwh
+        return self.get_soc_at_energy(self.stored_energy_wh)
     
     @property
     def cur_ts_discharge_wh(self):
@@ -153,7 +157,51 @@ class SolarBattery(PowerDevice):
         if self._cur_ts is None or self._cur_ts != self.time_obj.sim_time:
             self._cur_ts_discharge_wh = 0
             self._cur_ts_charge_wh = 0
-            self.cur_ts = self.time_obj.sim_time
+            self._cur_ts = self.time_obj.sim_time
+
+    def get_soc_at_energy(self, stored_energy_wh):
+        return stored_energy_wh/(self.usable_energy_kwh*1000)
+    
+    def c_rate_to_current(self, c_rate):
+        one_c_amps = (self.usable_energy_kwh/1000) / self.BATT_V
+        return one_c_amps * c_rate
+
+    def get_max_discharge_wh(self):
+        if self.stored_energy_wh == 0:
+            return 0
+        
+        c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
+        for wh in range(1,self.stored_energy_wh +2):
+            tmp_soc = self.get_soc_at_energy(self.stored_energy_wh - wh)
+            cur_c_avail = self.max_c_rate * self.discharge_soc_degradation.getValue(tmp_soc)
+
+            max_amps = self.c_rate_to_current((c_avail_start + cur_c_avail) /2.0)
+
+            cur_amps = wh/self.time_obj.get_dt.seconds() / self.BATT_V
+
+            if cur_amps > max_amps:
+                break
+
+        return wh-1
+
+    def get_max_charge_wh(self):
+        usable_wh = self.usable_energy_kwh*1000
+        if self.stored_energy_wh >= usable_wh:
+            return 0
+        
+        c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
+        for wh in range(1, usable_wh - self.stored_energy_wh +2):
+            tmp_soc = self.get_soc_at_energy(self.stored_energy_wh + wh)
+            cur_c_avail = self.max_c_rate * self.discharge_soc_degradation.getValue(tmp_soc)
+
+            max_amps = self.c_rate_to_current((c_avail_start + cur_c_avail) /2.0)
+
+            cur_amps = wh/self.time_obj.get_dt.seconds() / self.BATT_V
+
+            if cur_amps > max_amps:
+                break
+
+        return wh-1
 
     def get_generated_energy_wh(self) -> float:
         """
@@ -170,17 +218,10 @@ class SolarBattery(PowerDevice):
         """
         self.reset_ts()
 
-        #TODO!!
-        # Add to _cur_ts_charge_wh
+        cur_chg_wh = min(self.get_max_charge_wh, des_energy_wh)
 
-    def store_energy_transient(self, des_energy_wh) -> float:
-        """
-        Attempt to accept the energy specified to store 
-        and reject shortly after, reducing as necessary due to efficiency loss.
-
-        Returns the energy accepted.
-        """
-
+        self.stored_energy_wh += cur_chg_wh
+        self._cur_ts_charge_wh += cur_chg_wh
 
     def get_energy(self, des_energy_wh) -> float:
         """
@@ -192,8 +233,10 @@ class SolarBattery(PowerDevice):
         """
         self.reset_ts()
 
-        #TODO!!
-        # Add to _cur_ts_discharge_wh
+        cur_dch_wh = min(self.get_max_discharge_wh, des_energy_wh)
+
+        self.stored_energy_wh -= cur_dch_wh
+        self._cur_ts_discharge_wh -= cur_dch_wh
     
 class Grid(PowerDevice):
     def __init__(self, initial_credits,
@@ -233,8 +276,8 @@ class Grid(PowerDevice):
         self.weekend_off_peak_creditable_per_kwh = weekend_off_peak_creditable_per_kwh
         self.weekend_on_peak_creditable_per_kwh = weekend_on_peak_creditable_per_kwh
 
-        self.available_credits_dollars = initial_credits
-        self.money_spent_dollars = 0
+        self._available_credits_dollars = initial_credits
+        self._money_spent_dollars = 0
 
         self._cur_ts_import_wh = 0
         self._cur_ts_export_wh = 0
@@ -254,6 +297,31 @@ class Grid(PowerDevice):
     @property
     def cur_credit(self):
         return self._cur_credit
+    @property
+    def available_credits_dollars(self):
+        return self._available_credits_dollars
+    @property
+    def money_spent_dollars(self):
+        return self._money_spent_dollars
+    
+    def add_credits(self, credits):
+        self.reset_ts()
+        self._cur_credit += credits
+        self._available_credits_dollars += credits
+
+    def use_credits(self, des_credits):
+        self.reset_ts()
+        utilized = min(des_credits, self._available_credits_dollars)
+        self._available_credits_dollars -= utilized
+
+        # Keep _cur_credit as is to preserve in history that these were earned during this time period
+        # self._cur_credit -= min(self._cur_credit, utilized)
+        return utilized
+    
+    def purchase_energy(self, dollars):
+        self.reset_ts()
+        self._cur_cost += dollars
+        self._money_spent_dollars += dollars
 
     def reset_ts(self) -> float:
         if self._cur_ts is None or self._cur_ts != self.time_obj.sim_time:
@@ -261,7 +329,7 @@ class Grid(PowerDevice):
             self._cur_ts_import_wh = 0
             self._cur_cost = 0
             self._cur_credit = 0
-            self.cur_ts = self.time_obj.sim_time
+            self._cur_ts = self.time_obj.sim_time
 
     def get_generated_energy_wh(self) -> float:
         """
@@ -271,26 +339,31 @@ class Grid(PowerDevice):
     
     def store_energy(self, des_energy_wh) -> float:
         """
-        Attempt to accept the energy specified to store, 
+        Attempt to accept the energy specified to store (utilize in the grid), 
         reducing as necessary due to efficiency loss.
 
         Returns the energy accepted.
         """
         self.reset_ts()
-        if self._cur_ts is None or self._cur_ts != self.time_obj.sim_time:
-            self._cur_ts_export_wh = 0
-            self._cur_ts_import_wh = 0
-            self.cur_ts = self.time_obj.sim_time
-        #TODO: need to set _cur_ts_export and import
-        #TODO!!
 
-    def store_energy_transient(self, des_energy_wh) -> float:
-        """
-        Attempt to accept the energy specified to store 
-        and reject shortly after, reducing as necessary due to efficiency loss.
+        if des_energy_wh < 0:
+            raise ValueError("des_energy_wh must be non-negative!")
 
-        Returns the energy accepted.
-        """
+        des_energy_kwh = des_energy_wh/1000.0
+        
+        if self.is_peak():
+            if self.is_weekend():
+                credit_earned += self.weekend_on_peak_gen_pay_per_kwh * des_energy_kwh
+            else:
+                credit_earned += self.weekend_off_peak_gen_pay_per_kwh * des_energy_kwh
+        else:
+            if self.is_weekend():
+                credit_earned += self.weekday_on_peak_gen_pay_per_kwh * des_energy_kwh
+            else:
+                credit_earned += self.weekday_off_peak_gen_pay_per_kwh * des_energy_kwh
+
+        self._cur_ts_export_wh += des_energy_wh
+        self.add_credits(credit_earned)
 
 
     def get_energy(self, des_energy_wh) -> float:
@@ -302,9 +375,48 @@ class Grid(PowerDevice):
         Returns the energy provided.
         """
         self.reset_ts()
-        #TODO: need to set _cur_ts_export and import
 
-        #TODO!!
+        if self.is_weekend:
+            if self.is_peak:
+                energy_cost_per_kwh = self.weekend_on_peak_cost_per_kwh
+                energy_cost_credit_coverable_per_kwh = self.weekend_on_peak_creditable_per_kwh
+            else:
+                energy_cost_per_kwh = self.weekend_off_peak_cost_per_kwh
+                energy_cost_credit_coverable_per_kwh = self.weekend_off_peak_creditable_per_kwh
+        else:
+            if self.is_peak:
+                energy_cost_per_kwh = self.weekday_on_peak_cost_per_kwh
+                energy_cost_credit_coverable_per_kwh = self.weekday_on_peak_creditable_per_kwh
+            else:
+                energy_cost_per_kwh = self.weekday_off_peak_cost_per_kwh 
+                energy_cost_credit_coverable_per_kwh = self.weekday_off_peak_creditable_per_kwh
+        
+        #Credit should not be more powerful than the cost
+        energy_cost_credit_coverable_per_kwh = min(energy_cost_credit_coverable_per_kwh, energy_cost_per_kwh)
+
+        cur_energy_cost = des_energy_wh * (energy_cost_per_kwh/1000.0)
+        cur_creditable_cost = des_energy_wh * (energy_cost_credit_coverable_per_kwh/1000.0)
+
+        credits_used = self.use_credits(cur_creditable_cost)
+        net_cost = cur_energy_cost - credits_used
+        self.purchase_energy(net_cost)
+
+        self._cur_ts_import_wh += des_energy_wh
+        return des_energy_wh
+
+
+
+
+    def is_peak(self):
+        cur_tod = self.time_obj.sim_time.time()
+
+        if self.is_weekend():
+            return (cur_tod >= self.weekend_on_peak_start) & (cur_tod < self.weekend_on_peak_end)
+        else:
+            return (cur_tod >= self.weekday_on_peak_start) & (cur_tod < self.weekday_on_peak_end)
+
+    def is_weekend(self):
+        return self.time_obj.sim_time.weekday() >= 5 #sat=5, sun=6
 
 class EnergyLoad:
     def __init__(self):
