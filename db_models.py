@@ -46,5 +46,5 @@ class HistoricalData(db.Model):
     @hybrid_property
     def timestamp_start(self):
         """Calculated field: start time"""
-        return self.timestamp_start - timedelta(seconds=self.interval_len_sec)
+        return self.timestamp_end - timedelta(seconds=self.interval_len_sec)
 

@@ -272,10 +272,10 @@ def upload_report_csv():
             new_entry = HistoricalData(user_id=current_user.id,system_id=system_id,
                                     timestamp_end=cur_time_end,
                                     interval_len_sec=csv_time_interval_len.seconds,
-                                    production_wh=chunk["Energy Produced (Wh)"].values[0],
-                                    consumption_wh=chunk["Energy Consumed (Wh)"].values[0],
-                                    import_wh=chunk["Imported from Grid (Wh)"].values[0],
-                                    export_wh=chunk["Exported to Grid (Wh)"].values[0],
+                                    production_wh=int(chunk["Energy Produced (Wh)"].values[0]),
+                                    consumption_wh=int(chunk["Energy Consumed (Wh)"].values[0]),
+                                    import_wh=int(chunk["Imported from Grid (Wh)"].values[0]),
+                                    export_wh=int(chunk["Exported to Grid (Wh)"].values[0]),
                                     batt_charge_wh=batt_charge_wh,
                                     batt_discharge_wh=batt_discharge_wh)
             db.session.add(new_entry)
@@ -383,16 +383,71 @@ def simulate():
         # Get submitted form values
         data = request.form.to_dict()
 
-        #TODO: actually populate these with "data"
-        solar_array = solar_sim.SolarArray
-        battery = solar_sim.SolarBattery
-        grid = solar_sim.Grid
+        data['start_datetime'] = datetime.strptime(data['start_datetime'], "%Y-%m-%dT%H:%M")
+        data['end_datetime'] = datetime.strptime(data['end_datetime'], "%Y-%m-%dT%H:%M")
 
-        target_data = db.session.query(HistoricalData).filter((SystemDetails.system_id == system_id) &
-                                           (SystemDetails.user_id == current_user.id)).all()
+        data['grid_weekday_on_peak_start'] = datetime.strptime(data['grid_weekday_on_peak_start'], "%H:%M:%S").time()
+        data['grid_weekday_on_peak_end'] = datetime.strptime(data['grid_weekday_on_peak_end'], "%H:%M:%S").time()
+        data['grid_weekend_on_peak_start'] = datetime.strptime(data['grid_weekend_on_peak_start'], "%H:%M:%S").time()
+        data['grid_weekend_on_peak_end'] = datetime.strptime(data['grid_weekend_on_peak_end'], "%H:%M:%S").time()
+
+        #TODO: Convert data to proper data types
+        integer_fields = ["module_count"]
+        for field in integer_fields:
+            data[field] = int(data[field])
+
+        float_fields = ["batt_usable_energy_kwh","batt_charge_eff","batt_discharge_eff","batt_max_c_rate",
+                        "grid_weekday_off_peak_cost_per_kwh","grid_weekday_on_peak_cost_per_kwh","grid_weekend_off_peak_cost_per_kwh","grid_weekend_on_peak_cost_per_kwh",
+                        "grid_weekday_off_peak_gen_pay_per_kwh","grid_weekday_on_peak_gen_pay_per_kwh","grid_weekday_off_peak_creditable_per_kwh","grid_weekday_on_peak_creditable_per_kwh",
+                        "grid_weekend_off_peak_gen_pay_per_kwh","grid_weekend_on_peak_gen_pay_per_kwh","grid_weekend_off_peak_creditable_per_kwh","grid_weekend_on_peak_creditable_per_kwh"]
+        
+        for field in float_fields:
+            data[field] = float(data[field])
+
+        target_data = db.session.query(HistoricalData).filter((HistoricalData.system_id == system_id) &
+                                           (HistoricalData.user_id == current_user.id) &
+                                           (HistoricalData.timestamp_end > data['start_datetime']) &
+                                           (HistoricalData.timestamp_end <= data['end_datetime'])).order_by(HistoricalData.timestamp_end).all()
+        
+        
+        prev_end = data['start_datetime']
+        for d in target_data:
+            if (d.timestamp_end - prev_end).seconds > d.interval_len_sec+30:
+                #We're missing data!
+                results = "Error: Missing data between the times specified!"
+                return render_template("simulation_form.html", results=results, **data)
+            prev_end = d.timestamp_end
+
+        solar_array = solar_sim.SolarArray(panel_num=data['module_count'])
+        battery = solar_sim.SolarBattery(usable_energy_kwh=data['batt_usable_energy_kwh'],
+                                        charge_eff=data['batt_charge_eff'],
+                                        discharge_eff=data['batt_discharge_eff'],
+                                        max_c_rate=data['batt_max_c_rate'])
+        grid = solar_sim.Grid(initial_credits=0,
+                              weekday_on_peak_start=data['grid_weekday_on_peak_start'],
+                              weekday_on_peak_end=data['grid_weekday_on_peak_end'],
+                              weekend_on_peak_start=data['grid_weekend_on_peak_start'],
+                              weekend_on_peak_end=data['grid_weekend_on_peak_end'],
+                              weekday_off_peak_cost_per_kwh=data['grid_weekday_off_peak_cost_per_kwh'],
+                              weekday_on_peak_cost_per_kwh=data['grid_weekday_on_peak_cost_per_kwh'],
+                              weekend_off_peak_cost_per_kwh=data['grid_weekend_off_peak_cost_per_kwh'],
+                              weekend_on_peak_cost_per_kwh=data['grid_weekend_on_peak_cost_per_kwh'],
+                              weekday_off_peak_gen_pay_per_kwh=data['grid_weekday_off_peak_gen_pay_per_kwh'],
+                              weekday_on_peak_gen_pay_per_kwh=data['grid_weekday_on_peak_gen_pay_per_kwh'],
+                              weekday_off_peak_creditable_per_kwh=data['grid_weekday_off_peak_creditable_per_kwh'],
+                              weekday_on_peak_creditable_per_kwh=data['grid_weekday_on_peak_creditable_per_kwh'],
+                              weekend_off_peak_gen_pay_per_kwh=data['grid_weekend_off_peak_gen_pay_per_kwh'],
+                              weekend_on_peak_gen_pay_per_kwh=data['grid_weekend_on_peak_gen_pay_per_kwh'],
+                              weekend_off_peak_creditable_per_kwh=data['grid_weekend_off_peak_creditable_per_kwh'],
+                              weekend_on_peak_creditable_per_kwh=data['grid_weekend_on_peak_creditable_per_kwh'])
 
         controller = solar_sim.SimController(panels=solar_array, battery=battery, grid=grid)
         sim_out = controller.simulate(target_data, sys_details.num_modules)
+
+        sim_out.to_csv('simulation_output.csv', index=False)
+
+        #TODO: simulate again without any solar panels, without battery. Use to get comparison values
+        # Note: can call reset_memory() on each of the components
 
         # (Here, you'd process the data and run your simulation)
         results = "Simulation complete. Results: ..."  # Placeholder

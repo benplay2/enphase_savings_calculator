@@ -33,7 +33,7 @@
         <input type="number" step="0.01" class="form-control" name="batt_discharge_eff" value="{{ batt_discharge_eff }}"
             required>
 
-        <label class="form-label">Max C-Rate:</label>
+        <label class="form-label">Max C-Rate: (assuming 125V) max amp = maxC * (usable_energy_kwh/1000) / 125</label>
         <input type="number" step="0.01" class="form-control" name="batt_max_c_rate" value="{{ batt_max_c_rate }}"
             required>
 

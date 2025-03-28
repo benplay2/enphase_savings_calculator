@@ -3,12 +3,6 @@ from datetime import time, datetime, timedelta
 
 import pandas as pd
 
-"""
-TODO: This simulation needs to run with the system as is, then compare to 
-the system modified as requested.
-Return aggregate values, but also timeseries... (database?)
-"""
-
 class SimTime:
     def __init__(self) -> None:
         self.sim_time = datetime(0,0,0)
@@ -19,6 +13,13 @@ class SimTime:
 class PowerDevice(ABC):
     def __init__(self, time_obj:SimTime = SimTime) -> None:
         self.time_obj = time_obj
+
+    @abstractmethod
+    def reset_memory(self) -> float:
+        """
+        Reset any internal remembered values (like lifetime throughput)
+        """
+        pass
 
     @abstractmethod
     def get_generated_energy_wh(self) -> float:
@@ -70,6 +71,13 @@ class SolarArray(PowerDevice):
     def generated_energy_wh(self):
         return self._generated_energy_wh
 
+    def reset_memory(self) -> float:
+        """
+        Reset any internal remembered values (like lifetime throughput)
+        """
+        self._generated_energy_wh = 0
+        self.lifetime_energy_wh = 0
+
     def set_solar_generated_energy_wh(self, energy_per_panel_wh:float) -> float:
         self._generated_energy_wh = energy_per_panel_wh * self.panel_num
         return self.generated_energy_wh
@@ -91,7 +99,7 @@ class SolarArray(PowerDevice):
 
         Returns the energy accepted.
         """
-        return 0
+        return 0.0
     
     def get_energy(self, des_energy_wh) -> float:
         """
@@ -129,22 +137,53 @@ class Table1D():
         
 
 class SolarBattery(PowerDevice):
-    def __init__(self, usable_energy_kwh, charge_eff=0.93, discharge_eff=0.9) -> None:
+    def __init__(self, usable_energy_kwh:float, charge_eff=0.93, discharge_eff=0.9, max_c_rate=5) -> None:
         self.usable_energy_kwh = usable_energy_kwh
-        self.stored_energy_wh = (usable_energy_kwh*1000)/2
+        self.__stored_energy_wh = (usable_energy_kwh*1000)/2.0
         self.charge_eff = charge_eff
         self.discharge_eff = discharge_eff
-        self.throughput_wh = 0
-        self.max_c_rate = 5
+        self._throughput_wh = 0
+        self.max_c_rate = max_c_rate
         self.discharge_soc_degradation = Table1D(x_ary=[0,0.2,1],y_ary=[0,0.6,1])
         self._cur_ts_discharge_wh = 0
         self._cur_ts_charge_wh = 0
         self._cur_ts = None
         self.BATT_V = 125
     
+    def reset_memory(self) -> float:
+        """
+        Reset any internal remembered values (like lifetime throughput)
+        """
+        self.__stored_energy_wh = (self.usable_energy_kwh*1000)/2.0
+        self._throughput_wh = 0
+        self._cur_ts_discharge_wh = 0
+        self._cur_ts_charge_wh = 0
+        self._cur_ts = None
+
+    @property
+    def _stored_energy_wh(self):
+        return self.__stored_energy_wh
+    
+    @_stored_energy_wh.setter
+    def _stored_energy_wh(self, new_wh):
+        self.__reset_ts()
+        if new_wh > self._stored_energy_wh:
+            energy_in_wh = new_wh - self._stored_energy_wh
+            self._throughput_wh += energy_in_wh
+            self._cur_ts_charge_wh += energy_in_wh
+        else:
+            self._cur_ts_discharge_wh += self._stored_energy_wh - new_wh
+
+        self.__stored_energy_wh = new_wh
+        
+
+    @property
+    def throughput_wh(self):
+        return self._throughput_wh
+
     @property
     def soc(self):
-        return self.get_soc_at_energy(self.stored_energy_wh)
+        return self.get_soc_at_energy(self._stored_energy_wh)
     
     @property
     def cur_ts_discharge_wh(self):
@@ -153,26 +192,28 @@ class SolarBattery(PowerDevice):
     def cur_ts_charge_wh(self):
         return self._cur_ts_charge_wh
     
-    def reset_ts(self):
+    def __reset_ts(self):
         if self._cur_ts is None or self._cur_ts != self.time_obj.sim_time:
             self._cur_ts_discharge_wh = 0
             self._cur_ts_charge_wh = 0
             self._cur_ts = self.time_obj.sim_time
 
     def get_soc_at_energy(self, stored_energy_wh):
+        if self.usable_energy_kwh == 0:
+            return 1.0
         return stored_energy_wh/(self.usable_energy_kwh*1000)
     
     def c_rate_to_current(self, c_rate):
         one_c_amps = (self.usable_energy_kwh/1000) / self.BATT_V
         return one_c_amps * c_rate
 
-    def get_max_discharge_wh(self):
-        if self.stored_energy_wh == 0:
+    def get_max_discharge_rate_wh(self):
+        if self._stored_energy_wh == 0:
             return 0
         
         c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
-        for wh in range(1,self.stored_energy_wh +2):
-            tmp_soc = self.get_soc_at_energy(self.stored_energy_wh - wh)
+        for wh in range(1,self._stored_energy_wh +2):
+            tmp_soc = self.get_soc_at_energy(self._stored_energy_wh - wh)
             cur_c_avail = self.max_c_rate * self.discharge_soc_degradation.getValue(tmp_soc)
 
             max_amps = self.c_rate_to_current((c_avail_start + cur_c_avail) /2.0)
@@ -184,14 +225,14 @@ class SolarBattery(PowerDevice):
 
         return wh-1
 
-    def get_max_charge_wh(self):
+    def get_max_charge_rate_wh(self):
         usable_wh = self.usable_energy_kwh*1000
-        if self.stored_energy_wh >= usable_wh:
-            return 0
+        if self._stored_energy_wh >= usable_wh:
+            return 0.0
         
         c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
-        for wh in range(1, usable_wh - self.stored_energy_wh +2):
-            tmp_soc = self.get_soc_at_energy(self.stored_energy_wh + wh)
+        for wh in range(1, usable_wh - self._stored_energy_wh +2):
+            tmp_soc = self.get_soc_at_energy(self._stored_energy_wh + wh)
             cur_c_avail = self.max_c_rate * self.discharge_soc_degradation.getValue(tmp_soc)
 
             max_amps = self.c_rate_to_current((c_avail_start + cur_c_avail) /2.0)
@@ -202,6 +243,52 @@ class SolarBattery(PowerDevice):
                 break
 
         return wh-1
+    
+    def __discharge_battery_wh(self, wh_des):
+        #Discharge the battery, returning the energy (wh) provided
+        self.__reset_ts()
+        if wh_des == 0:
+            return 0
+
+        avail_stored_wh = self._stored_energy_wh
+        avail_export_wh = avail_stored_wh * self.discharge_eff
+
+        avail_export_arb_wh = min(avail_export_wh, self.get_max_discharge_rate_wh())
+
+        wh_exported = min(avail_export_arb_wh, wh_des)
+
+        wh_reduced = wh_exported * (1+(1-self.discharge_eff))
+
+        if wh_reduced > self._stored_energy_wh:
+            #Something went wrong numerically.. adjust
+            wh_reduced = self._stored_energy_wh
+            wh_exported = wh_reduced * self.discharge_eff
+
+        self._stored_energy_wh -= wh_reduced
+
+        return wh_exported
+    
+    def __charge_battery_wh(self, wh_des):
+        #Charge the battery, returning the energy (wh) accepted
+        self.__reset_ts()
+        if wh_des == 0:
+            return 0.0
+
+        avail_sync_wh = (self.usable_energy_kwh*1000) - self._stored_energy_wh
+        avail_import_wh = avail_sync_wh * (1+(1-self.charge_eff))
+
+        avail_export_arb_wh = min(avail_import_wh, self.get_max_charge_rate_wh())
+
+        wh_imported = min(avail_export_arb_wh, wh_des)
+
+        wh_increase = wh_imported * self.charge_eff
+        self._stored_energy_wh += wh_increase
+
+        if self._stored_energy_wh > (self.usable_energy_kwh*1000):
+            #Something went wrong numerically.. but reset
+            self._stored_energy_wh = self.usable_energy_kwh*1000
+
+        return wh_imported
 
     def get_generated_energy_wh(self) -> float:
         """
@@ -216,12 +303,7 @@ class SolarBattery(PowerDevice):
 
         Returns the energy accepted.
         """
-        self.reset_ts()
-
-        cur_chg_wh = min(self.get_max_charge_wh, des_energy_wh)
-
-        self.stored_energy_wh += cur_chg_wh
-        self._cur_ts_charge_wh += cur_chg_wh
+        return self.__charge_battery_wh(des_energy_wh)
 
     def get_energy(self, des_energy_wh) -> float:
         """
@@ -231,12 +313,7 @@ class SolarBattery(PowerDevice):
 
         Returns the energy provided.
         """
-        self.reset_ts()
-
-        cur_dch_wh = min(self.get_max_discharge_wh, des_energy_wh)
-
-        self.stored_energy_wh -= cur_dch_wh
-        self._cur_ts_discharge_wh -= cur_dch_wh
+        return self.__discharge_battery_wh(des_energy_wh)
     
 class Grid(PowerDevice):
     def __init__(self, initial_credits,
@@ -276,7 +353,21 @@ class Grid(PowerDevice):
         self.weekend_off_peak_creditable_per_kwh = weekend_off_peak_creditable_per_kwh
         self.weekend_on_peak_creditable_per_kwh = weekend_on_peak_creditable_per_kwh
 
+        self._initial_credits = initial_credits
         self._available_credits_dollars = initial_credits
+        self._money_spent_dollars = 0
+
+        self._cur_ts_import_wh = 0
+        self._cur_ts_export_wh = 0
+        self._cur_cost = 0
+        self._cur_credit = 0
+        self._cur_ts = None
+
+    def reset_memory(self) -> float:
+        """
+        Reset any internal remembered values (like lifetime throughput)
+        """
+        self._available_credits_dollars = self._initial_credits
         self._money_spent_dollars = 0
 
         self._cur_ts_import_wh = 0
@@ -293,7 +384,7 @@ class Grid(PowerDevice):
         return self._cur_ts_export_wh
     @property
     def cur_cost(self):
-        return self._cur_credit
+        return self._cur_cost
     @property
     def cur_credit(self):
         return self._cur_credit
@@ -305,12 +396,12 @@ class Grid(PowerDevice):
         return self._money_spent_dollars
     
     def add_credits(self, credits):
-        self.reset_ts()
+        self.__reset_ts()
         self._cur_credit += credits
         self._available_credits_dollars += credits
 
     def use_credits(self, des_credits):
-        self.reset_ts()
+        self.__reset_ts()
         utilized = min(des_credits, self._available_credits_dollars)
         self._available_credits_dollars -= utilized
 
@@ -319,11 +410,11 @@ class Grid(PowerDevice):
         return utilized
     
     def purchase_energy(self, dollars):
-        self.reset_ts()
+        self.__reset_ts()
         self._cur_cost += dollars
         self._money_spent_dollars += dollars
 
-    def reset_ts(self) -> float:
+    def __reset_ts(self) -> float:
         if self._cur_ts is None or self._cur_ts != self.time_obj.sim_time:
             self._cur_ts_export_wh = 0
             self._cur_ts_import_wh = 0
@@ -344,7 +435,7 @@ class Grid(PowerDevice):
 
         Returns the energy accepted.
         """
-        self.reset_ts()
+        self.__reset_ts()
 
         if des_energy_wh < 0:
             raise ValueError("des_energy_wh must be non-negative!")
@@ -353,18 +444,18 @@ class Grid(PowerDevice):
         
         if self.is_peak():
             if self.is_weekend():
-                credit_earned += self.weekend_on_peak_gen_pay_per_kwh * des_energy_kwh
+                credit_earned = self.weekend_on_peak_gen_pay_per_kwh * des_energy_kwh
             else:
-                credit_earned += self.weekend_off_peak_gen_pay_per_kwh * des_energy_kwh
+                credit_earned = self.weekend_off_peak_gen_pay_per_kwh * des_energy_kwh
         else:
             if self.is_weekend():
-                credit_earned += self.weekday_on_peak_gen_pay_per_kwh * des_energy_kwh
+                credit_earned = self.weekday_on_peak_gen_pay_per_kwh * des_energy_kwh
             else:
-                credit_earned += self.weekday_off_peak_gen_pay_per_kwh * des_energy_kwh
+                credit_earned = self.weekday_off_peak_gen_pay_per_kwh * des_energy_kwh
 
         self._cur_ts_export_wh += des_energy_wh
         self.add_credits(credit_earned)
-
+        return des_energy_wh
 
     def get_energy(self, des_energy_wh) -> float:
         """
@@ -374,17 +465,17 @@ class Grid(PowerDevice):
 
         Returns the energy provided.
         """
-        self.reset_ts()
+        self.__reset_ts()
 
-        if self.is_weekend:
-            if self.is_peak:
+        if self.is_weekend():
+            if self.is_peak():
                 energy_cost_per_kwh = self.weekend_on_peak_cost_per_kwh
                 energy_cost_credit_coverable_per_kwh = self.weekend_on_peak_creditable_per_kwh
             else:
                 energy_cost_per_kwh = self.weekend_off_peak_cost_per_kwh
                 energy_cost_credit_coverable_per_kwh = self.weekend_off_peak_creditable_per_kwh
         else:
-            if self.is_peak:
+            if self.is_peak():
                 energy_cost_per_kwh = self.weekday_on_peak_cost_per_kwh
                 energy_cost_credit_coverable_per_kwh = self.weekday_on_peak_creditable_per_kwh
             else:
@@ -421,16 +512,17 @@ class Grid(PowerDevice):
 class EnergyLoad:
     def __init__(self):
         self.energy_usage_wh = 0
-        self.remaining_load_wh = 0
+        self._remaining_load_wh = 0
     def add_energy_usage(self, energy_wh):
         self.energy_usage_wh += energy_wh
+        self._remaining_load_wh += energy_wh
     def draw_energy(self, power_device_list:PowerDevice) -> None:
         for dev in power_device_list:
-            self.remaining_load_wh -= dev.get_energy(self.remaining_load_wh)
-            if self.remaining_load_wh == 0:
+            self._remaining_load_wh -= dev.get_energy(self._remaining_load_wh)
+            if self._remaining_load_wh == 0:
                 return
             
-        if self.remaining_load_wh > 0:
+        if self._remaining_load_wh > 0:
             raise ValueError("Not all load could be drawn with the provided power device list!")
 
     
@@ -495,6 +587,10 @@ class SimController:
                 "lifetime_import_cost": self.grid.money_spent_dollars,
                 }
             
-            results_df.append(step_data)
+            new_row = []
+            for col in columns:
+                new_row.append(step_data[col])
+
+            results_df.loc[len(results_df)] = new_row
 
         return results_df
