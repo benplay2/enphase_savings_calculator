@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Dashboard</title>
 
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
     <style>
         .fetched-button {
             background-color: green;
@@ -76,16 +77,26 @@
                     else {
                         event.target.innerText = origText
                     }
+                    const json_res = response.json().then(data => {
+                        // Access JSON item values here
+                        alert(data.Result);
+                    })
+                        .catch(error => {
+                            console.error("Error interpreting response json:", error);
+                        });
+
                     
                 })
                 .catch(error => {
                     console.error("Error:", error)
+
+                    alert("Error: " + error)
 
                     event.target.innerText = origText
                 });
             }
         });
     </script>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
 </body>
 </html>

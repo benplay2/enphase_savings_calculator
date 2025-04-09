@@ -199,7 +199,7 @@ def dashboard():
                     existing_detail.num_modules=detail['modules']
                     existing_detail.battery_capacity_wh=detail['battery_capacity_wh']
                     existing_detail.size_watt=detail['size_w']
-                    existing_detail.operational_at=datetime.fromtimestamp(detail['operational_at'])
+                    existing_detail.operational_at=enphase_api.enphase_epoch_to_datetime_noDST(detail['operational_at'])
                 else:
                     new_details_entry = SystemDetails(user_id=current_user.id, 
                                                 system_id=detail['system_id'],
@@ -207,7 +207,7 @@ def dashboard():
                                                 num_modules=detail['modules'],
                                                 battery_capacity_wh=detail['battery_capacity_wh'],
                                                 size_watt=detail['size_w'],
-                                                operational_at=datetime.fromtimestamp(detail['operational_at']))
+                                                operational_at=enphase_api.enphase_epoch_to_datetime_noDST(detail['operational_at']))
                     db.session.add(new_details_entry)
             
             db.session.commit()
@@ -271,7 +271,7 @@ def upload_report_csv():
 
             new_entry = HistoricalData(user_id=current_user.id,system_id=system_id,
                                     timestamp_end=cur_time_end,
-                                    interval_len_sec=csv_time_interval_len.seconds,
+                                    interval_len_sec=csv_time_interval_len.total_seconds(),
                                     production_wh=int(chunk["Energy Produced (Wh)"].values[0]),
                                     consumption_wh=int(chunk["Energy Consumed (Wh)"].values[0]),
                                     import_wh=int(chunk["Imported from Grid (Wh)"].values[0]),
@@ -333,9 +333,10 @@ def fetchdata_week():
     else:
         batt_intervals = batt_telemetry['intervals']
 
-    first_time = datetime.fromtimestamp(prod_intervals[0]['end_at'])
-    last_time = datetime.fromtimestamp(prod_intervals[-1]['end_at'])
-    interval_len = datetime.fromtimestamp(prod_intervals[1]['end_at']) - first_time
+    #first_time = datetime.fromtimestamp(prod_intervals[0]['end_at'])
+    first_time = enphase_api.enphase_epoch_to_datetime_noDST(prod_intervals[0]['end_at'])
+    last_time = enphase_api.enphase_epoch_to_datetime_noDST(prod_intervals[-1]['end_at'])
+    interval_len = enphase_api.enphase_epoch_to_datetime_noDST(prod_intervals[1]['end_at']) - first_time
 
     #Delete existing entries
     db.session.query(HistoricalData).filter((HistoricalData.system_id==system_id)
@@ -344,6 +345,7 @@ def fetchdata_week():
 
     #Go through "intervals". Each telemetry output should have the same intervals.
     #Delete any existing data between intervals[0].end_at and intervals[-1].end_at
+    unexpected_interval_len = False
     for i in range(0, len(prod_intervals)):
         if batt_present:
             batt_charge_wh = batt_intervals[i]['charge']['enwh']
@@ -351,9 +353,18 @@ def fetchdata_week():
         else:
             batt_charge_wh = 0
             batt_discharge_wh = 0
+        
+        cur_timestamp_end = enphase_api.enphase_epoch_to_datetime_noDST(prod_intervals[i]['end_at'])
+        if i > 0:
+            #Check if we hae an unexpected interval length
+            cur_interval_len = cur_timestamp_end - prev_timestamp_end
+            if cur_interval_len > interval_len:
+                print(f"Interval length of fetched data is inconsistent! From {prev_timestamp_end} to {cur_timestamp_end} is greater than {interval_len}")
+                unexpected_interval_len = True
+
         new_entry = HistoricalData(user_id=current_user.id,system_id=system_id,
-                                   timestamp_end=datetime.fromtimestamp(prod_intervals[i]['end_at']),
-                                   interval_len_sec=interval_len.seconds,
+                                   timestamp_end=cur_timestamp_end,
+                                   interval_len_sec=interval_len.total_seconds(),
                                    production_wh=prod_intervals[i]['wh_del'],
                                    consumption_wh=cons_intervals[i]['enwh'],
                                    import_wh=import_intervals[i]['wh_imported'],
@@ -361,12 +372,15 @@ def fetchdata_week():
                                    batt_charge_wh=batt_charge_wh,
                                    batt_discharge_wh=batt_discharge_wh)
         db.session.add(new_entry)
-            
+        
+        prev_timestamp_end = cur_timestamp_end
     db.session.commit()
 
     #Populate new entries and commit
-
-    return "{\"Result\":\"Success!\"}", 200
+    if unexpected_interval_len:
+        return "{\"Result\":\"Success, however there were inconsistent interval lengths between data points.\"}", 200
+    else:
+        return "{\"Result\":\"Success!\"}", 200
 
 @app.route("/simulation", methods=["GET", "POST"])
 @login_required
@@ -386,12 +400,13 @@ def simulate():
         data['start_datetime'] = datetime.strptime(data['start_datetime'], "%Y-%m-%dT%H:%M")
         data['end_datetime'] = datetime.strptime(data['end_datetime'], "%Y-%m-%dT%H:%M")
 
-        data['grid_weekday_on_peak_start'] = datetime.strptime(data['grid_weekday_on_peak_start'], "%H:%M:%S").time()
-        data['grid_weekday_on_peak_end'] = datetime.strptime(data['grid_weekday_on_peak_end'], "%H:%M:%S").time()
-        data['grid_weekend_on_peak_start'] = datetime.strptime(data['grid_weekend_on_peak_start'], "%H:%M:%S").time()
-        data['grid_weekend_on_peak_end'] = datetime.strptime(data['grid_weekend_on_peak_end'], "%H:%M:%S").time()
+        data['grid_weekday_on_peak_start'] = parse_time(data['grid_weekday_on_peak_start'])
+        data['grid_weekday_on_peak_end'] = parse_time(data['grid_weekday_on_peak_end'])
+        data['grid_weekend_on_peak_start'] = parse_time(data['grid_weekend_on_peak_start'])
+        data['grid_weekend_on_peak_end'] = parse_time(data['grid_weekend_on_peak_end'])
+        
 
-        #TODO: Convert data to proper data types
+        #Convert data to proper data types
         integer_fields = ["module_count"]
         for field in integer_fields:
             data[field] = int(data[field])
@@ -412,10 +427,11 @@ def simulate():
         
         prev_end = data['start_datetime']
         for d in target_data:
-            if (d.timestamp_end - prev_end).seconds > d.interval_len_sec+30:
+            if (d.timestamp_end - prev_end).total_seconds() > d.interval_len_sec+30:
                 #We're missing data!
-                results = "Error: Missing data between the times specified!"
-                return render_template("simulation_form.html", results=results, **data)
+                err_msg = f"Error: Missing data between the times specified! {prev_end} --> {d.timestamp_start}"
+                print(err_msg)
+                return render_template("simulation_form.html", err_msg=err_msg, results=None, **data)
             prev_end = d.timestamp_end
 
         solar_array = solar_sim.SolarArray(panel_num=data['module_count'])
@@ -446,12 +462,65 @@ def simulate():
 
         sim_out.to_csv('simulation_output.csv', index=False)
 
+        sum_import_kwh = sim_out['imported_wh'].sum()/1000
+        sum_export_kwh = sim_out['exported_wh'].sum()/1000
+        sim_consumed_kwh = sim_out['consumed_wh'].sum()/1000
+        sim_produced_kwh = sim_out['produced_wh'].sum()/1000
+        sum_import_cost = sim_out.iloc[-1]['lifetime_import_cost']
+        sum_export_credits = sim_out['credits_earned'].sum()
+
+        sum_consumption_peak_kwh = sim_out.loc[sim_out['is_peak'], 'consumed_wh'].sum()/1000
+        sum_consumption_offpeak_kwh = sim_out.loc[~sim_out['is_peak'], 'consumed_wh'].sum()/1000
+
+        sum_import_peak_kwh = sim_out.loc[sim_out['is_peak'], 'imported_wh'].sum()/1000
+        sum_import_offpeak_kwh = sim_out.loc[~sim_out['is_peak'], 'imported_wh'].sum()/1000
+
+        sum_export_peak_kwh = sim_out.loc[sim_out['is_peak'], 'exported_wh'].sum()/1000
+        sum_export_offpeak_kwh = sim_out.loc[~sim_out['is_peak'], 'exported_wh'].sum()/1000
+
+        sum_produced_peak_kwh = sim_out.loc[sim_out['is_peak'], 'produced_wh'].sum()/1000
+        sum_produced_offpeak_kwh = sim_out.loc[~sim_out['is_peak'], 'produced_wh'].sum()/1000
+
+        sum_battery_peak_kwh = sim_out.loc[sim_out['is_peak'], 'discharge_wh'].sum()/1000
+        sum_battery_offpeak_kwh = sim_out.loc[~sim_out['is_peak'], 'discharge_wh'].sum()/1000
+
+        sum_import_peak_cost = sim_out.loc[sim_out['is_peak'], 'import_cost'].sum()
+        sum_import_nopeak_cost = sim_out.loc[~sim_out['is_peak'], 'import_cost'].sum()
+
+        sum_import_peak_credits = sim_out.loc[sim_out['is_peak'], 'credits_earned'].sum()
+        sum_import_nopeak_credits = sim_out.loc[~sim_out['is_peak'], 'credits_earned'].sum()
+
         #TODO: simulate again without any solar panels, without battery. Use to get comparison values
         # Note: can call reset_memory() on each of the components
 
-        # (Here, you'd process the data and run your simulation)
-        results = "Simulation complete. Results: ..."  # Placeholder
-        return render_template("simulation_form.html", results=results, **data)
+        results_aggregated = {
+            "sum_import_kwh": sum_import_kwh,
+            "sum_export_kwh": sum_export_kwh,
+            "sim_consumed_kwh": sim_consumed_kwh,
+            "sim_produced_kwh": sim_produced_kwh,
+            "sum_import_cost": sum_import_cost,
+            "sum_export_credits": sum_export_credits,
+            "credits_remaining": sim_out.iloc[-1]['credits_available'],
+
+            "sum_consumption_peak_kwh": sum_consumption_peak_kwh,
+            "sum_consumption_offpeak_kwh": sum_consumption_offpeak_kwh,
+            "sum_import_peak_kwh": sum_import_peak_kwh,
+            "sum_import_offpeak_kwh": sum_import_offpeak_kwh,
+            "sum_export_peak_kwh": sum_export_peak_kwh,
+            "sum_export_offpeak_kwh": sum_export_offpeak_kwh,
+            "sum_produced_peak_kwh": sum_produced_peak_kwh,
+            "sum_produced_offpeak_kwh": sum_produced_offpeak_kwh,
+            "sum_battery_peak_kwh": sum_battery_peak_kwh,
+            "sum_battery_offpeak_kwh": sum_battery_offpeak_kwh,
+
+            "sum_import_peak_cost": sum_import_peak_cost,
+            "sum_import_nopeak_cost": sum_import_nopeak_cost,
+            "sum_import_peak_credits": sum_import_peak_credits,
+            "sum_import_nopeak_credits":sum_import_nopeak_credits,
+
+        }
+        
+        return render_template("simulation_form.html", err_msg=None, results=json.dumps(results_aggregated), **data)
     
     
     
@@ -511,7 +580,23 @@ def simulate():
         "end_datetime": formatted_end
     }
 
-    return render_template("simulation_form.html", results=None, **initial_values)
+    return render_template("simulation_form.html", err_msg=None, results=None, **initial_values)
+
+def parse_time(value):
+    """
+    Convert HH:MM or HH:MM:SS to a time object
+    """
+
+    # Count the number of colons in the string
+    colon_count = value.count(':')
+    
+    if colon_count == 2:  # Format "%H:%M:%S"
+        return datetime.strptime(value, "%H:%M:%S").time()
+    elif colon_count == 1:  # Format "%H:%M"
+        return datetime.strptime(value, "%H:%M").time()
+    else:
+        raise ValueError("Invalid time format")
+
 
 @app.route('/logout')
 @login_required

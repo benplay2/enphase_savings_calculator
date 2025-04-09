@@ -5,6 +5,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 from datetime import datetime, timedelta
 import time
+from tzlocal import get_localzone
+import pytz
 
 #Requires a developer account and a registered developer app.
 #
@@ -20,6 +22,9 @@ client_secret = os.getenv('ENPHASE_CLIENT_SECRET')
 # Ensure that the environment variables are set
 if not api_key or not client_id or not client_secret:
     raise ValueError("Not all ENPHASE API environment variables are set")
+
+# Get the local timezone automatically
+local_tz = get_localzone()
 
 def get_env_safe(env_name: str) -> str:
     if env_name is None or len(env_name) == 0:
@@ -355,3 +360,24 @@ def get_energy_import_telemetry(token_dictionary: dict, system_id:int, granulari
         print("Response content:", response.text)
     raise ValueError("Unable to get energy import data!")
 
+def enphase_epoch_to_datetime_noDST(enphase_ts:int):
+    """
+    Convert the enphase time (epoch format) to a datetime,
+    shifting it to the proper GMT non-DST.
+    """
+    dt = datetime.fromtimestamp(enphase_ts)
+    
+    #There seems to be a bug with the Enphase API
+    #where the epoch jumps an hour when entering DST
+    #Try to fix so we're always treating without DST
+
+    # Attach tzinfo (naively) and adjust for DST
+    dt_with_tz = dt.replace(tzinfo=local_tz)
+    dt_withdst = dt_with_tz.astimezone(local_tz)
+
+    # Check if DST is active
+    if bool(dt_with_tz.dst()):
+        #localized dt has been pushed ahead an hour for daylight savings time
+        dt = dt - dt_with_tz.dst()
+
+    return dt
