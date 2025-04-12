@@ -460,6 +460,10 @@ def simulate():
         controller = solar_sim.SimController(panels=solar_array, battery=battery, grid=grid)
         sim_out = controller.simulate(target_data, sys_details.num_modules)
 
+        #Extract some values from solar_array, battery, and grid to get some aggregated values from the simulation
+        sum_generated_energy_kwh = solar_array.lifetime_energy_wh / 1000
+        batt_throughput_kwh = battery.throughput_wh / 1000
+
         sim_out.to_csv('simulation_output.csv', index=False)
 
         sum_import_kwh = sim_out['imported_wh'].sum()/1000
@@ -490,10 +494,44 @@ def simulate():
         sum_import_peak_credits = sim_out.loc[sim_out['is_peak'], 'credits_earned'].sum()
         sum_import_nopeak_credits = sim_out.loc[~sim_out['is_peak'], 'credits_earned'].sum()
 
-        #TODO: simulate again without any solar panels, without battery. Use to get comparison values
-        # Note: can call reset_memory() on each of the components
+        #Calculate grid dependence (% of time energy was imported from the grid)
+        #Count the number of rows that imported_wh is greater than 0
+        count_imported_wh = (sim_out['imported_wh'] > 0).sum()
+        #Count the number of rows that consumed_wh or imported_wh is greater than 0
+        count_consumed_wh = ((sim_out['consumed_wh'] > 0) | (sim_out['imported_wh'] > 0)).sum()
+        #Calculate the percentage of time energy was imported from the grid
+        grid_dependence = (count_imported_wh / count_consumed_wh) * 100 if count_consumed_wh > 0 else 0
+
+        #Calculate the percentage of time the battery was depleted
+        #Count the number of rows that imported_wh is greater than 0
+        count_battery_depleted = (sim_out['soc'] == 0).sum()
+        batt_depleted_percentage = (count_battery_depleted / count_consumed_wh) * 100 if count_consumed_wh > 0 else 0
+        
+        #Calculate the percentage of time the battery was saturated
+        count_battery_saturated = (sim_out['soc'] == 1).sum()
+        batt_saturated_percentage = (count_battery_saturated / count_consumed_wh) * 100 if count_consumed_wh > 0 else 0
+
+
+        #simulate again without any solar panels, without battery. Use to get comparison values
+        grid.reset_memory()
+        no_solar_array = solar_array
+        no_solar_array.panel_num = 0
+        no_solar_array.reset_memory()
+        no_battery = battery
+        no_battery.usable_energy_kwh = 0
+        no_battery.reset_memory()
+        controller = solar_sim.SimController(panels=no_solar_array, battery=no_battery, grid=grid)
+        sim_out_no_solar = controller.simulate(target_data, sys_details.num_modules)
+
+        sum_import_peak_cost_no_solar = sim_out_no_solar.loc[sim_out_no_solar['is_peak'], 'import_cost'].sum()
+        sum_import_nopeak_cost_no_solar = sim_out_no_solar.loc[~sim_out_no_solar['is_peak'], 'import_cost'].sum()
+
+        solar_savings_dollars = sim_out_no_solar['import_cost'].sum() - sim_out['import_cost'].sum()
+        percent_solar_savings =  100*solar_savings_dollars / sim_out_no_solar['import_cost'].sum()
+        
 
         results_aggregated = {
+            "system_name": sys_details.name,
             "sum_import_kwh": sum_import_kwh,
             "sum_export_kwh": sum_export_kwh,
             "sim_consumed_kwh": sim_consumed_kwh,
@@ -501,6 +539,13 @@ def simulate():
             "sum_import_cost": sum_import_cost,
             "sum_export_credits": sum_export_credits,
             "credits_remaining": sim_out.iloc[-1]['credits_available'],
+            "batt_throughput_kwh": batt_throughput_kwh,
+            "sum_generated_energy_kwh": sum_generated_energy_kwh,
+            "grid_dependence": grid_dependence,
+            "solar_savings_dollars": solar_savings_dollars,
+            "percent_solar_savings": percent_solar_savings,
+            "batt_depleted_percentage": batt_depleted_percentage,
+            "batt_saturated_percentage": batt_saturated_percentage,
 
             "sum_consumption_peak_kwh": sum_consumption_peak_kwh,
             "sum_consumption_offpeak_kwh": sum_consumption_offpeak_kwh,
@@ -517,6 +562,9 @@ def simulate():
             "sum_import_nopeak_cost": sum_import_nopeak_cost,
             "sum_import_peak_credits": sum_import_peak_credits,
             "sum_import_nopeak_credits":sum_import_nopeak_credits,
+
+            "sum_import_peak_cost_no_solar": sum_import_peak_cost_no_solar,
+            "sum_import_nopeak_cost_no_solar": sum_import_nopeak_cost_no_solar,
 
         }
         
