@@ -18,164 +18,161 @@
     <h2>Simulation Parameters</h2>
     <form id="simulation-form" action="{{ url_for('simulate') }}" method="POST">
         <input type="hidden" name="system_id" value="{{ system_id }}">
-        <!-- Module Count -->
-        <label for="module_count" class="form-label">Number of Solar Panels:</label>
-        <input type="number" class="form-control" name="module_count" value="{{ module_count }}" required>
 
-        <h4 class="mt-4">Battery Parameters</h4>
-        <label class="form-label">Usable Energy (kWh):</label>
-        <input type="number" step="0.01" class="form-control" name="batt_usable_energy_kwh"
-            value="{{ batt_usable_energy_kwh }}" required>
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs" id="simulationTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="solar-tab" data-bs-toggle="tab" data-bs-target="#solar" type="button" role="tab" aria-controls="solar" aria-selected="true">Solar Parameters</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="battery-tab" data-bs-toggle="tab" data-bs-target="#battery" type="button" role="tab" aria-controls="battery" aria-selected="false">Battery Parameters</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="grid-tab" data-bs-toggle="tab" data-bs-target="#grid" type="button" role="tab" aria-controls="grid" aria-selected="false">Grid Parameters</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="datetime-tab" data-bs-toggle="tab" data-bs-target="#datetime" type="button" role="tab" aria-controls="datetime" aria-selected="false">Date Range</button>
+            </li>
+        </ul>
 
-        <label class="form-label">Charge Efficiency (0-1):</label>
-        <input type="number" step="0.01" class="form-control" name="batt_charge_eff" value="{{ batt_charge_eff }}"
-            required>
+        <!-- Tabs Content -->
+        <div class="tab-content mt-3" id="simulationTabsContent">
+            <!-- Solar Parameters Tab -->
+            <div class="tab-pane fade show active" id="solar" role="tabpanel" aria-labelledby="solar-tab">
+                <label for="module_count" class="form-label">Number of Solar Panels:</label>
+                <input type="number" class="form-control" name="module_count" value="{{ module_count }}" required>
 
-        <label class="form-label">Discharge Efficiency (0-1):</label>
-        <input type="number" step="0.01" class="form-control" name="batt_discharge_eff" value="{{ batt_discharge_eff }}"
-            required>
-
-        <label class="form-label">Max C-Rate: (assuming 125V) max amp = maxC * (usable_energy_kwh/1000) / 125</label>
-        <input type="number" step="0.01" class="form-control" name="batt_max_c_rate" value="{{ batt_max_c_rate }}"
-            required>
-
-        <h4 class="mt-4">Grid Parameters</h4>
-
-        <!-- Time Inputs -->
-        <div class="row mt-3">
-            <!-- Left Column: Start Times -->
-            <div class="col-md-6">
-                <label class="form-label">Weekday On-Peak Start:</label>
-                <input type="time" class="form-control" name="grid_weekday_on_peak_start"
-                    value="{{ grid_weekday_on_peak_start }}" required>
-
-                <label class="form-label">Weekend On-Peak Start:</label>
-                <input type="time" class="form-control" name="grid_weekend_on_peak_start"
-                    value="{{ grid_weekend_on_peak_start }}" required>
+                <label for="solar_consumption_bias" class="form-label mt-3">Solar Consumption Bias (0-1):</label>
+                <input type="number" step="0.01" class="form-control" name="solar_consumption_bias" value="{{ solar_consumption_bias }}" required
+                    data-bs-toggle="tooltip" data-bs-placement="top" title="Percentage of solar energy that shows up as consumption. Tweak to remove correlation between solar and consumption.">
             </div>
 
-            <!-- Right Column: End Times -->
-            <div class="col-md-6">
-                <label class="form-label">Weekday On-Peak End:</label>
-                <input type="time" class="form-control" name="grid_weekday_on_peak_end"
-                    value="{{ grid_weekday_on_peak_end }}" required>
+            <!-- Battery Parameters Tab -->
+            <div class="tab-pane fade" id="battery" role="tabpanel" aria-labelledby="battery-tab">
+                <label class="form-label">Usable Energy (kWh):</label>
+                <input type="number" step="0.01" class="form-control" name="batt_usable_energy_kwh" value="{{ batt_usable_energy_kwh }}" required>
 
-                <label class="form-label">Weekend On-Peak End:</label>
-                <input type="time" class="form-control" name="grid_weekend_on_peak_end"
-                    value="{{ grid_weekend_on_peak_end }}" required>
-            </div>
-        </div>
+                <label class="form-label">Charge Efficiency (0-1):</label>
+                <input type="number" step="0.01" class="form-control" name="batt_charge_eff" value="{{ batt_charge_eff }}" required>
 
+                <label class="form-label">Discharge Efficiency (0-1):</label>
+                <input type="number" step="0.01" class="form-control" name="batt_discharge_eff" value="{{ batt_discharge_eff }}" required>
 
-        <hr>
-        <!-- Cost and Payment Inputs -->
-        <div class="row mt-3">
-            <!-- Left Column: Off-Peak -->
-            <div class="col-md-6">
-                <label class="form-label">Weekday Off-Peak Cost ($/kWh):</label>
-                <input type="number" step="0.01" class="form-control" name="grid_weekday_off_peak_cost_per_kwh"
-                    value="{{ grid_weekday_off_peak_cost_per_kwh }}" required>
-
-                <label class="form-label">Weekend Off-Peak Cost ($/kWh):</label>
-                <input type="number" step="0.01" class="form-control" name="grid_weekend_off_peak_cost_per_kwh"
-                    value="{{ grid_weekend_off_peak_cost_per_kwh }}" required>
+                <label class="form-label">Max C-Rate: (assuming 125V) max amp = maxC * (usable_energy_kwh/1000) / 125</label>
+                <input type="number" step="0.01" class="form-control" name="batt_max_c_rate" value="{{ batt_max_c_rate }}" required>
             </div>
 
-            <!-- Right Column: On-Peak -->
-            <div class="col-md-6">
-                <label class="form-label">Weekday On-Peak Cost ($/kWh):</label>
-                <input type="number" step="0.01" class="form-control" name="grid_weekday_on_peak_cost_per_kwh"
-                    value="{{ grid_weekday_on_peak_cost_per_kwh }}" required>
+            <!-- Grid Parameters Tab -->
+            <div class="tab-pane fade" id="grid" role="tabpanel" aria-labelledby="grid-tab">
+                <h4>Time Inputs</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Weekday On-Peak Start:</label>
+                        <input type="time" class="form-control" name="grid_weekday_on_peak_start" value="{{ grid_weekday_on_peak_start }}" required>
 
-                <label class="form-label">Weekend On-Peak Cost ($/kWh):</label>
-                <input type="number" step="0.01" class="form-control" name="grid_weekend_on_peak_cost_per_kwh"
-                    value="{{ grid_weekend_on_peak_cost_per_kwh }}" required>
-            </div>
-        </div>
+                        <label class="form-label">Weekend On-Peak Start:</label>
+                        <input type="time" class="form-control" name="grid_weekend_on_peak_start" value="{{ grid_weekend_on_peak_start }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Weekday On-Peak End:</label>
+                        <input type="time" class="form-control" name="grid_weekday_on_peak_end" value="{{ grid_weekday_on_peak_end }}" required>
 
+                        <label class="form-label">Weekend On-Peak End:</label>
+                        <input type="time" class="form-control" name="grid_weekend_on_peak_end" value="{{ grid_weekend_on_peak_end }}" required>
+                    </div>
+                </div>
 
-        <!-- Credits -->
-        <div class="row">
-            <div class="col-md-6">
-                <label for="grid_weekday_off_peak_gen_pay_per_kwh" class="form-label">Weekday Off-Peak Gen Credit
-                    ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_gen_pay_per_kwh"
-                    name="grid_weekday_off_peak_gen_pay_per_kwh" value="{{ grid_weekday_off_peak_gen_pay_per_kwh }}">
-            </div>
-            <div class="col-md-6">
-                <label for="grid_weekday_on_peak_gen_pay_per_kwh" class="form-label">Weekday On-Peak Gen Credit
-                    ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_gen_pay_per_kwh"
-                    name="grid_weekday_on_peak_gen_pay_per_kwh" value="{{ grid_weekday_on_peak_gen_pay_per_kwh }}">
-            </div>
-        </div>
+                <hr>
+                <!-- Cost and Payment Inputs -->
+                <div class="row mt-3">
+                    <!-- Left Column: Off-Peak -->
+                    <div class="col-md-6">
+                        <label class="form-label">Weekday Off-Peak Cost ($/kWh):</label>
+                        <input type="number" step="0.01" class="form-control" name="grid_weekday_off_peak_cost_per_kwh" value="{{ grid_weekday_off_peak_cost_per_kwh }}" required>
 
-        <div class="row mt-3">
-            <div class="col-md-6">
-                <label for="grid_weekday_off_peak_creditable_per_kwh" class="form-label">Weekday Off-Peak Credit
-                    Redeemable ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_creditable_per_kwh"
-                    name="grid_weekday_off_peak_creditable_per_kwh"
-                    value="{{ grid_weekday_off_peak_creditable_per_kwh }}">
-            </div>
-            <div class="col-md-6">
-                <label for="grid_weekday_on_peak_creditable_per_kwh" class="form-label">Weekday On-Peak Credit
-                    Redeemable ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_creditable_per_kwh"
-                    name="grid_weekday_on_peak_creditable_per_kwh"
-                    value="{{ grid_weekday_on_peak_creditable_per_kwh }}">
-            </div>
-        </div>
+                        <label class="form-label">Weekend Off-Peak Cost ($/kWh):</label>
+                        <input type="number" step="0.01" class="form-control" name="grid_weekend_off_peak_cost_per_kwh" value="{{ grid_weekend_off_peak_cost_per_kwh }}" required>
+                    </div>
 
-        <div class="row mt-3">
-            <div class="col-md-6">
-                <label for="grid_weekend_off_peak_gen_pay_per_kwh" class="form-label">Weekend Off-Peak Gen Credit
-                    ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_gen_pay_per_kwh"
-                    name="grid_weekend_off_peak_gen_pay_per_kwh" value="{{ grid_weekend_off_peak_gen_pay_per_kwh }}">
-            </div>
-            <div class="col-md-6">
-                <label for="grid_weekend_on_peak_gen_pay_per_kwh" class="form-label">Weekend On-Peak Gen Credit
-                    ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_gen_pay_per_kwh"
-                    name="grid_weekend_on_peak_gen_pay_per_kwh" value="{{ grid_weekend_on_peak_gen_pay_per_kwh }}">
-            </div>
-        </div>
+                    <!-- Right Column: On-Peak -->
+                    <div class="col-md-6">
+                        <label class="form-label">Weekday On-Peak Cost ($/kWh):</label>
+                        <input type="number" step="0.01" class="form-control" name="grid_weekday_on_peak_cost_per_kwh" value="{{ grid_weekday_on_peak_cost_per_kwh }}" required>
 
-        <div class="row mt-3">
-            <div class="col-md-6">
-                <label for="grid_weekend_off_peak_creditable_per_kwh" class="form-label">Weekend Off-Peak Credit
-                    Redeemable ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_creditable_per_kwh"
-                    name="grid_weekend_off_peak_creditable_per_kwh"
-                    value="{{ grid_weekend_off_peak_creditable_per_kwh }}">
-            </div>
-            <div class="col-md-6">
-                <label for="grid_weekend_on_peak_creditable_per_kwh" class="form-label">Weekend On-Peak Credit
-                    Redeemable ($/kWh):</label>
-                <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_creditable_per_kwh"
-                    name="grid_weekend_on_peak_creditable_per_kwh"
-                    value="{{ grid_weekend_on_peak_creditable_per_kwh }}">
-            </div>
-        </div>
+                        <label class="form-label">Weekend On-Peak Cost ($/kWh):</label>
+                        <input type="number" step="0.01" class="form-control" name="grid_weekend_on_peak_cost_per_kwh" value="{{ grid_weekend_on_peak_cost_per_kwh }}" required>
+                    </div>
+                </div>
 
-        <hr>
-        <!-- Start and End Datetime Fields -->
-        <div class="row mt-4">
-            <div class="col-md-6">
-                <label for="start_datetime" class="form-label">Start Datetime:</label>
-                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime"
-                    value="{{ start_datetime }}">
+                <!-- Credits -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="grid_weekday_off_peak_gen_pay_per_kwh" class="form-label">Weekday Off-Peak Gen Credit ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_gen_pay_per_kwh" name="grid_weekday_off_peak_gen_pay_per_kwh" value="{{ grid_weekday_off_peak_gen_pay_per_kwh }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="grid_weekday_on_peak_gen_pay_per_kwh" class="form-label">Weekday On-Peak Gen Credit ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_gen_pay_per_kwh" name="grid_weekday_on_peak_gen_pay_per_kwh" value="{{ grid_weekday_on_peak_gen_pay_per_kwh }}">
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="grid_weekday_off_peak_creditable_per_kwh" class="form-label">Weekday Off-Peak Credit Redeemable ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekday_off_peak_creditable_per_kwh" name="grid_weekday_off_peak_creditable_per_kwh" value="{{ grid_weekday_off_peak_creditable_per_kwh }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="grid_weekday_on_peak_creditable_per_kwh" class="form-label">Weekday On-Peak Credit Redeemable ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekday_on_peak_creditable_per_kwh" name="grid_weekday_on_peak_creditable_per_kwh" value="{{ grid_weekday_on_peak_creditable_per_kwh }}">
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="grid_weekend_off_peak_gen_pay_per_kwh" class="form-label">Weekend Off-Peak Gen Credit ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_gen_pay_per_kwh" name="grid_weekend_off_peak_gen_pay_per_kwh" value="{{ grid_weekend_off_peak_gen_pay_per_kwh }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="grid_weekend_on_peak_gen_pay_per_kwh" class="form-label">Weekend On-Peak Gen Credit ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_gen_pay_per_kwh" name="grid_weekend_on_peak_gen_pay_per_kwh" value="{{ grid_weekend_on_peak_gen_pay_per_kwh }}">
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="grid_weekend_off_peak_creditable_per_kwh" class="form-label">Weekend Off-Peak Credit Redeemable ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekend_off_peak_creditable_per_kwh" name="grid_weekend_off_peak_creditable_per_kwh" value="{{ grid_weekend_off_peak_creditable_per_kwh }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="grid_weekend_on_peak_creditable_per_kwh" class="form-label">Weekend On-Peak Credit Redeemable ($/kWh):</label>
+                        <input type="number" step="any" class="form-control" id="grid_weekend_on_peak_creditable_per_kwh" name="grid_weekend_on_peak_creditable_per_kwh" value="{{ grid_weekend_on_peak_creditable_per_kwh }}">
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="initial_credits" class="form-label">Initial Credits ($):</label>
+                        <input type="number" step="any" class="form-control" id="initial_credits" name="initial_credits" value="{{ initial_credits }}">
+                    </div>
+                </div>
             </div>
-            <div class="col-md-6">
-                <label for="end_datetime" class="form-label">End Datetime:</label>
-                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime"
-                    value="{{ end_datetime }}">
+
+            <!-- Datetime Tab -->
+            <div class="tab-pane fade" id="datetime" role="tabpanel" aria-labelledby="datetime-tab">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="start_datetime" class="form-label">Start Datetime:</label>
+                        <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{ start_datetime }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="end_datetime" class="form-label">End Datetime:</label>
+                        <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime" value="{{ end_datetime }}">
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="text-center mt-4">
-            <!-- Submit Button -->
             <button type="submit" class="btn btn-primary mt-3">Simulate</button>
         </div>
     </form>
@@ -195,8 +192,9 @@
 
         <div id="energy_bar"></div>
 
-        <div id="aggregated_percentages"></div>
+        <div id="aggregated_percentages" style="height: 300px;"></div>
 
+        <div id="stacked_timeseries_plot" style="min-height: 600px; height: 80vh;"></div>
 
         {% endif %}
     </div>
@@ -301,33 +299,49 @@
         Plotly.newPlot('energy_bar', data, layout, { responsive: true });
 
         // Aggregated Percentages Plot
-        const percentage_categories = ['Grid Dependence', 'Solar Savings', 'Battery Depleted', 'Battery Saturated'];
+        const percentage_categories = ['Battery Saturated', 'Battery Depleted', 'Grid Dependence', 'Solar Savings'];
         const percentage_values = [
+            results.batt_saturated_percentage,
+            results.batt_depleted_percentage,
             results.grid_dependence,
             results.percent_solar_savings,
-            results.batt_depleted_percentage,
-            results.batt_saturated_percentage
         ];
+
+        // Create hover text for each category
+        const hoverTexts = percentage_categories.map((category, index) => {
+            if (category === 'Solar Savings') {
+                return `${percentage_values[index].toFixed(2)}%<br>Savings: $${results.solar_savings_dollars.toFixed(2)}`;
+            }
+            return `${percentage_values[index].toFixed(2)}%`;
+        });
 
         const percentagesBar = {
             x: percentage_values,
             y: percentage_categories,
             type: 'bar',
             orientation: 'h',
-            marker: { color: '#6BAED6' },
-            hovertemplate: (d) => {
-                if (d.y === 'Solar Savings') {
-                    return '%{x:.2f}%<br>Savings: $' + results.solar_savings_dollars.toFixed(2) + '<extra></extra>';
-                }
-                return '%{x:.2f}%<extra></extra>';
-            }
+            marker: {
+                color: percentage_categories.map((category, index) => {
+                    if (category === 'Solar Savings') {
+                        return `rgb(${255 - (percentage_values[index] * 2.55)}, ${percentage_values[index] * 2.55}, 0)`; // Red to Green
+                    } else if (category === 'Grid Dependence') {
+                        return `rgb(${percentage_values[index] * 2.55}, ${255 - (percentage_values[index] * 2.55)}, 0)`; // Green to Red
+                    } else if (category === 'Battery Depleted') {
+                        return `rgb(${(percentage_values[index] * 2.55)}, ${(255 - percentage_values[index] * 2.55)}, 128)`; // Blue to Orange
+                    }
+                    return '#6BAED6'; // Default color
+                }),
+            },
+            hovertext: hoverTexts,
+            hoverinfo: 'text',
         };
 
         const percentagesLayout = {
             title: { text: 'Aggregated Percentages'},
             xaxis: {
                 title: { text: 'Percentage (%)' },
-                rangemode: 'tozero'
+                rangemode: 'tozero',
+                range: [0, 100] // Ensure range is always 0 to 100
             },
             yaxis: {
                 //title: { text: 'Metrics' }
@@ -337,9 +351,180 @@
         };
 
         Plotly.newPlot('aggregated_percentages', [percentagesBar], percentagesLayout, { responsive: true });
-    </script>
+
+        // Stacked Timeseries Plot
+        const timestamps = results.timeseries_data.timestamp;
+
+        // Top plot (Units of watt)
+        const importedW = {
+            x: timestamps,
+            y: results.timeseries_data.imported_w.map(v => -v), // Negative imported_w
+            name: 'Imported (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#FF5733' },
+            hovertemplate: 'Imported %{y:.2f} W<extra></extra>',
+        };
+
+        const exportedW = {
+            x: timestamps,
+            y: results.timeseries_data.exported_w,
+            name: 'Exported (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#33FF57' },
+            hovertemplate: 'Exported %{y:.2f} W<extra></extra>',
+        };
+
+        const producedW = {
+            x: timestamps,
+            y: results.timeseries_data.produced_w,
+            name: 'Produced (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#3375FF' },
+            hovertemplate: 'Produced %{y:.2f} W<extra></extra>',
+        };
+
+        const chargeW = {
+            x: timestamps,
+            y: results.timeseries_data.charge_w,
+            name: 'Charge (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#FFC300' },
+            hovertemplate: 'Charge %{y:.2f} W<extra></extra>',
+        };
+
+        const dischargeW = {
+            x: timestamps,
+            y: results.timeseries_data.discharge_w.map(v => -v), // Negative discharge_w
+            name: 'Discharge (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#C70039' },
+            hovertemplate: 'Discharge %{y:.2f} W<extra></extra>',
+        };
+
+        const consumedW = {
+            x: timestamps,
+            y: results.timeseries_data.consumed_w.map(v => -v), // Negative consumed_w
+            name: 'Consumed (W)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#900C3F' },
+            hovertemplate: 'Consumed %{y:.2f} W<extra></extra>',
+        };
+
+        // Middle plot (Units of percent)
+        const soc = {
+            x: timestamps,
+            y: results.timeseries_data.soc.map(v => v * 100), // Convert to percentage
+            name: 'State of Charge (%)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#581845' },
+            hovertemplate: 'SOC %{y:.2f}%<extra></extra>',
+        };
+
+        // Bottom plot (Units of $)
+        const lifetimeImportCost = {
+            x: timestamps,
+            y: results.timeseries_data.lifetime_import_cost,
+            name: 'Cumulative Import Cost ($)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#1F618D' },
+            hovertemplate: 'Import Cost $%{y:.2f}<extra></extra>',
+        };
+
+        const creditsAvailable = {
+            x: timestamps,
+            y: results.timeseries_data.credits_available,
+            name: 'Credits Available ($)',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#28B463' },
+            hovertemplate: 'Credits Available $%{y:.2f}<extra></extra>',
+        };
+
+        const stackedData = [
+            // Top plot (Units of watt)
+            { ...importedW, xaxis: 'x', yaxis: 'y1' },
+            { ...exportedW, xaxis: 'x', yaxis: 'y1' },
+            { ...producedW, xaxis: 'x', yaxis: 'y1' },
+            { ...chargeW, xaxis: 'x', yaxis: 'y1' },
+            { ...dischargeW, xaxis: 'x', yaxis: 'y1' },
+            { ...consumedW, xaxis: 'x', yaxis: 'y1' },
+
+            // Middle plot (Units of percent)
+            { ...soc, xaxis: 'x', yaxis: 'y2' },
+
+            // Bottom plot (Units of $)
+            { ...lifetimeImportCost, xaxis: 'x', yaxis: 'y3' },
+            { ...creditsAvailable, xaxis: 'x', yaxis: 'y3' },
+        ];
+
+        const stackedLayout = {
+            title: 'Stacked Timeseries Plots',
+            grid: { rows: 3, columns: 1, subplots: [['xy1'], ['xy2'], ['xy3']], roworder: 'top to bottom' },
+            xaxis: { 
+                title: 'Time', 
+                showgrid: true
+            },
+            yaxis: { title: 'Power (W)', showgrid: true, domain: [0.7, 1.0] }, // Top plot
+            yaxis2: { title: 'State of Charge (%)', showgrid: true, anchor: 'x', domain: [0.45, 0.65], range: [0, 100] }, // Middle plot
+            yaxis3: { title: 'Cost ($)', showgrid: true, anchor: 'x', domain: [0.1, 0.4] }, // Bottom plot
+            annotations: [
+                {
+                    text: 'Power (W)',
+                    xref: 'paper',
+                    yref: 'y1 domain',
+                    x: -0.1, // Adjusted to avoid overlap
+                    y: 0.5,
+                    showarrow: false,
+                    textangle: -90,
+                    font: { size: 12 }
+                },
+                {
+                    text: 'State of Charge (%)',
+                    xref: 'paper',
+                    yref: 'y2 domain',
+                    x: -0.1, // Adjusted to avoid overlap
+                    y: 0.5,
+                    showarrow: false,
+                    textangle: -90,
+                    font: { size: 12 }
+                },
+                {
+                    text: 'Cost ($)',
+                    xref: 'paper',
+                    yref: 'y3 domain',
+                    x: -0.1, // Adjusted to avoid overlap
+                    y: 0.5,
+                    showarrow: false,
+                    textangle: -90,
+                    font: { size: 12 }
+                }
+            ],
+            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 0 },
+            hovermode: 'x unified',
+        };
+
+        Plotly.newPlot('stacked_timeseries_plot', stackedData, stackedLayout, { responsive: true });
+</script>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
+
+    <script>
+        // Initialize Bootstrap tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    </script>
 </body>
 
 </html>
+

@@ -411,10 +411,11 @@ def simulate():
         for field in integer_fields:
             data[field] = int(data[field])
 
-        float_fields = ["batt_usable_energy_kwh","batt_charge_eff","batt_discharge_eff","batt_max_c_rate",
-                        "grid_weekday_off_peak_cost_per_kwh","grid_weekday_on_peak_cost_per_kwh","grid_weekend_off_peak_cost_per_kwh","grid_weekend_on_peak_cost_per_kwh",
-                        "grid_weekday_off_peak_gen_pay_per_kwh","grid_weekday_on_peak_gen_pay_per_kwh","grid_weekday_off_peak_creditable_per_kwh","grid_weekday_on_peak_creditable_per_kwh",
-                        "grid_weekend_off_peak_gen_pay_per_kwh","grid_weekend_on_peak_gen_pay_per_kwh","grid_weekend_off_peak_creditable_per_kwh","grid_weekend_on_peak_creditable_per_kwh"]
+        float_fields = ["batt_usable_energy_kwh", "batt_charge_eff", "batt_discharge_eff", "batt_max_c_rate",
+                        "grid_weekday_off_peak_cost_per_kwh", "grid_weekday_on_peak_cost_per_kwh", "grid_weekend_off_peak_cost_per_kwh", "grid_weekend_on_peak_cost_per_kwh",
+                        "grid_weekday_off_peak_gen_pay_per_kwh", "grid_weekday_on_peak_gen_pay_per_kwh", "grid_weekday_off_peak_creditable_per_kwh", "grid_weekday_on_peak_creditable_per_kwh",
+                        "grid_weekend_off_peak_gen_pay_per_kwh", "grid_weekend_on_peak_gen_pay_per_kwh", "grid_weekend_off_peak_creditable_per_kwh", "grid_weekend_on_peak_creditable_per_kwh",
+                        "solar_consumption_bias", "initial_credits"]
         
         for field in float_fields:
             data[field] = float(data[field])
@@ -439,7 +440,7 @@ def simulate():
                                         charge_eff=data['batt_charge_eff'],
                                         discharge_eff=data['batt_discharge_eff'],
                                         max_c_rate=data['batt_max_c_rate'])
-        grid = solar_sim.Grid(initial_credits=0,
+        grid = solar_sim.Grid(initial_credits=data['initial_credits'],  # Pass initial_credits to Grid
                               weekday_on_peak_start=data['grid_weekday_on_peak_start'],
                               weekday_on_peak_end=data['grid_weekday_on_peak_end'],
                               weekend_on_peak_start=data['grid_weekend_on_peak_start'],
@@ -458,7 +459,7 @@ def simulate():
                               weekend_on_peak_creditable_per_kwh=data['grid_weekend_on_peak_creditable_per_kwh'])
 
         controller = solar_sim.SimController(panels=solar_array, battery=battery, grid=grid)
-        sim_out = controller.simulate(target_data, sys_details.num_modules)
+        sim_out = controller.simulate(target_data, sys_details.num_modules, solar_consumption_bias=data['solar_consumption_bias'])
 
         #Extract some values from solar_array, battery, and grid to get some aggregated values from the simulation
         sum_generated_energy_kwh = solar_array.lifetime_energy_wh / 1000
@@ -505,15 +506,18 @@ def simulate():
         #Calculate the percentage of time the battery was depleted
         #Count the number of rows that imported_wh is greater than 0
         count_battery_depleted = (sim_out['soc'] == 0).sum()
-        batt_depleted_percentage = (count_battery_depleted / count_consumed_wh) * 100 if count_consumed_wh > 0 else 0
+        #Get total number of rows in the simulation
+        count_total = len(sim_out)
+        batt_depleted_percentage = (count_battery_depleted / count_total) * 100 if battery.usable_energy_wh > 0 else 100
         
         #Calculate the percentage of time the battery was saturated
         count_battery_saturated = (sim_out['soc'] == 1).sum()
-        batt_saturated_percentage = (count_battery_saturated / count_consumed_wh) * 100 if count_consumed_wh > 0 else 0
+        batt_saturated_percentage = (count_battery_saturated / count_total) * 100
 
 
         #simulate again without any solar panels, without battery. Use to get comparison values
         grid.reset_memory()
+        #Note: initial credits are 0
         no_solar_array = solar_array
         no_solar_array.panel_num = 0
         no_solar_array.reset_memory()
@@ -521,7 +525,7 @@ def simulate():
         no_battery.usable_energy_kwh = 0
         no_battery.reset_memory()
         controller = solar_sim.SimController(panels=no_solar_array, battery=no_battery, grid=grid)
-        sim_out_no_solar = controller.simulate(target_data, sys_details.num_modules)
+        sim_out_no_solar = controller.simulate(target_data, sys_details.num_modules, solar_consumption_bias=data['solar_consumption_bias'])
 
         sum_import_peak_cost_no_solar = sim_out_no_solar.loc[sim_out_no_solar['is_peak'], 'import_cost'].sum()
         sum_import_nopeak_cost_no_solar = sim_out_no_solar.loc[~sim_out_no_solar['is_peak'], 'import_cost'].sum()
@@ -565,9 +569,29 @@ def simulate():
 
             "sum_import_peak_cost_no_solar": sum_import_peak_cost_no_solar,
             "sum_import_nopeak_cost_no_solar": sum_import_nopeak_cost_no_solar,
-
         }
-        
+
+        # Calculate time differences in hours
+        time_deltas = sim_out["timestamp"].diff().dt.total_seconds() / 3600
+        time_deltas.iloc[0] = time_deltas.iloc[1]  # Handle the first row (set it equal to the second row)
+
+        # Convert timestamps to strings for JSON serialization
+        timestamps = sim_out["timestamp"].dt.strftime('%Y-%m-%dT%H:%M:%S').tolist()
+
+        # Add timeseries data for Plotly plot with watt-hour converted to watts
+        results_aggregated["timeseries_data"] = {
+            "timestamp": timestamps,
+            "produced_w": (sim_out["produced_wh"] / time_deltas).tolist(),
+            "consumed_w": (sim_out["consumed_wh"] / time_deltas).tolist(),
+            "charge_w": (sim_out["charge_wh"] / time_deltas).tolist(),
+            "discharge_w": (sim_out["discharge_wh"] / time_deltas).tolist(),
+            "exported_w": (sim_out["exported_wh"] / time_deltas).tolist(),
+            "imported_w": (sim_out["imported_wh"] / time_deltas).tolist(),
+            "soc": sim_out["soc"].tolist(),
+            "lifetime_import_cost": sim_out["lifetime_import_cost"].tolist(),
+            "credits_available": sim_out["credits_available"].tolist(),
+        }
+
         return render_template("simulation_form.html", err_msg=None, results=json.dumps(results_aggregated), **data)
     
     
@@ -602,6 +626,7 @@ def simulate():
         "system_id": system_id,
         "system_name": sys_details.name,
         "module_count": sys_details.num_modules,
+        "solar_consumption_bias": 0.23,
         "batt_usable_energy_kwh": sys_details.battery_capacity_wh/1000,
         "batt_charge_eff": 0.9,
         "batt_discharge_eff": 0.9,
@@ -625,7 +650,8 @@ def simulate():
         "grid_weekend_off_peak_creditable_per_kwh":0.17885,
         "grid_weekend_on_peak_creditable_per_kwh":0.17885,
         "start_datetime": formatted_start,
-        "end_datetime": formatted_end
+        "end_datetime": formatted_end,
+        "initial_credits": 0.0  # Default value for initial credits
     }
 
     return render_template("simulation_form.html", err_msg=None, results=None, **initial_values)

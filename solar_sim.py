@@ -3,6 +3,7 @@ from datetime import time, datetime, timedelta
 from math import floor
 
 import pandas as pd
+from scipy.optimize import minimize
 
 class SimTime:
     def __init__(self) -> None:
@@ -587,7 +588,16 @@ class EnergyLoad:
         if self._remaining_load_wh > 0:
             raise ValueError("Not all load could be drawn with the provided power device list!")
 
+# Raw data from Enphase API has biased consumption due to losses from solar
+# The following logic attempts to remove that bias by detecting an efficiency
+# value and reducing the consumption and production by that amount.
     
+def solar_consumption_corr_objective(eff, consumption, solar):
+    corrected = consumption - (1 - eff) * solar
+    return abs(corrected.corr(solar))  # Want to minimize correlation
+
+
+
 class SimController:
     def __init__(self, panels:SolarArray, battery:SolarBattery, grid:Grid):
         self.solar = panels
@@ -600,7 +610,21 @@ class SimController:
         self.battery.time_obj = self.time
         self.grid.time_obj = self.time
 
-    def simulate(self, energy_timeseries, timeseries_panel_num):
+    def simulate(self, energy_timeseries, timeseries_panel_num, solar_consumption_bias=0.0):
+        
+        # OLD LOGIC: Tried this, but ended up under-estimating efficiency and therefore over-reducing consumption
+        # Determine the efficiency of the solar panels
+        # This is done by minimizing the correlation between the corrected consumption and solar production
+        # The efficiency is the value that minimizes the correlation
+        # This is a simple optimization problem that can be solved using scipy's minimize function
+        # consumption_raw = pd.Series([step.consumption_wh for step in energy_timeseries])
+        # solar_raw = pd.Series([step.production_wh for step in energy_timeseries])
+        # #Only use data where solar is greater than 0.1W
+        # mask = solar_raw > 0.1
+        # solar_eff_result = minimize(solar_consumption_corr_objective, x0=0.9, args=(consumption_raw[mask], solar_raw[mask]), bounds=[(0.5, 1)])
+        # solar_eff = solar_eff_result.x[0]
+        # print(f"Solar efficiency: {solar_eff}")
+
         # Define column names
         columns = ["timestamp", 
                    "produced_wh", "consumed_wh", "stored_wh", "charge_wh", "discharge_wh", "exported_wh", "imported_wh", 
@@ -625,8 +649,10 @@ class SimController:
 
             # Setup the time step
             self.time.sim_time = cur_time
-            cur_produced_wh = self.solar.set_solar_generated_energy_wh(step_data.production_wh / timeseries_panel_num)
-            load_obj.add_energy_usage(step_data.consumption_wh + step_data.batt_discharge_wh - step_data.batt_charge_wh)
+            solar_consumption_bleed = step_data.production_wh * solar_consumption_bias
+            consumption_normalized = max(0,step_data.consumption_wh - solar_consumption_bleed)
+            cur_produced_wh = self.solar.set_solar_generated_energy_wh((step_data.production_wh-solar_consumption_bleed) / timeseries_panel_num)
+            load_obj.add_energy_usage(consumption_normalized + step_data.batt_discharge_wh - step_data.batt_charge_wh)
 
             #Begin energy transfer
             load_obj.draw_energy(energy_device_list)
@@ -641,7 +667,7 @@ class SimController:
             step_data = {
                 "timestamp": cur_time,
                 "produced_wh": cur_produced_wh,
-                "consumed_wh": step_data.consumption_wh,
+                "consumed_wh": consumption_normalized,
                 "stored_wh": self.battery.cur_ts_charge_wh - self.battery.cur_ts_discharge_wh,
                 "charge_wh": self.battery.cur_ts_charge_wh,
                 "discharge_wh": self.battery.cur_ts_discharge_wh,
