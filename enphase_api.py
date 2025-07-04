@@ -19,6 +19,35 @@ api_key = os.getenv('ENPHASE_API_KEY')
 client_id = os.getenv('ENPHASE_CLIENT_ID')
 client_secret = os.getenv('ENPHASE_CLIENT_SECRET')
 
+MAX_API_CALLS_PER_MINUTE = 10 #Free API limit
+
+class APICallFrequencyMonitor():
+    def __init__(self):
+        self.max_calls_per_minute = MAX_API_CALLS_PER_MINUTE
+        self.api_call_history = [] # List to store timestamps of API calls
+
+    def record_api_call(self):
+        current_time = datetime.now()
+        # Remove calls older than 1 minute
+        self.api_call_history = [t for t in self.api_call_history if t > current_time - timedelta(minutes=1)]
+        self.api_call_history.append(current_time)
+
+    def can_make_api_call(self) -> bool:
+        # Using over 80% of the API call limit triggers emails
+        return len(self.api_call_history) < (self.max_calls_per_minute * 0.8)
+    
+    def wait_for_next_api_call_and_record(self):
+        if not self.can_make_api_call():
+            # Calculate how long to wait until we can make the next API call
+            oldest_call_time = self.api_call_history[0]
+            wait_time = (oldest_call_time + timedelta(minutes=1)) - datetime.now()
+            if wait_time.total_seconds() > 0:
+                print(f"Waiting for {wait_time.total_seconds()} seconds until next API call.")
+                time.sleep(wait_time.total_seconds())
+        self.record_api_call()
+
+api_monitor = APICallFrequencyMonitor()
+
 # Ensure that the environment variables are set
 if not api_key or not client_id or not client_secret:
     raise ValueError("Not all ENPHASE API environment variables are set")
@@ -65,6 +94,7 @@ def authorize(code: str, token_dictionary: dict) -> dict:
     url = f"{base_url}?{urlencode(params)}"
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record()
     response = requests.post(url, auth=HTTPBasicAuth(client_id, client_secret))
 
     # Check the response status code and content
@@ -86,6 +116,7 @@ def refresh_token(token_dictionary: dict) -> dict:
     url = f"{base_url}?{urlencode(params)}"
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record()
     response = requests.post(url, auth=HTTPBasicAuth(client_id, client_secret))
 
     # Check the response status code and content
@@ -112,8 +143,8 @@ def get_system_details(token_dictionary: dict):
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -137,8 +168,8 @@ def get_system_summary(system_id: int, token_dictionary: dict):
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -193,8 +224,8 @@ def get_production_telemetry(token_dictionary: dict, system_id:int, granularity=
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -231,8 +262,8 @@ def get_consumption_telemetry(token_dictionary: dict, system_id:int, granularity
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -269,8 +300,8 @@ def get_battery_telemetry(token_dictionary: dict, system_id:int, granularity='we
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -307,8 +338,8 @@ def get_energy_export_telemetry(token_dictionary: dict, system_id:int, granulari
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
@@ -345,8 +376,8 @@ def get_energy_import_telemetry(token_dictionary: dict, system_id:int, granulari
     }
 
     # Make the POST request with basic authorization
+    api_monitor.wait_for_next_api_call_and_record() # Avoid API rate limit errors
     response = requests.get(url, headers=headers)
-    time.sleep(10) #Avoid API rate limit errors
 
     # Check the response status code and content
     if response.status_code == 200:
