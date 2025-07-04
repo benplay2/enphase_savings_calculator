@@ -187,7 +187,16 @@ def dashboard():
     existing_detail = db.session.query(SystemDetails).filter_by(user_id=current_user.id).first()
 
     if refresh_systems or existing_detail is None:
-        token_dict, system_dict_list = enphase_api.get_all_system_summaries(token_dictionary=get_token_dict(current_user))
+        try:
+            token_dict, system_dict_list = enphase_api.get_all_system_summaries(token_dictionary=get_token_dict(current_user))
+        except Exception as e:
+            print(f"Error fetching system details, reauthorizing: {str(e)}", 'danger')
+            token_dict = get_token_dict(current_user)
+            token_dict['refresh_token'] = None  # Clear refresh token to force reauthorization
+            update_user_token_info(current_user, token_dict)
+            auth_url = enphase_api.get_initialize_auth_url(redirect_uri=get_token_dict(current_user)['redirect_uri'])
+            return redirect(auth_url)
+        
         update_user_token_info(current_user, token_dict)
 
         # Update SystemDetails database to hold system_dict
