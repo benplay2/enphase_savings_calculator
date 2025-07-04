@@ -257,6 +257,22 @@ class SolarBattery(PowerDevice):
                 break
 
         return min(self._stored_energy_wh,wh-1)
+    
+    def is_discharge_rate_within_limits(self, wh_des):
+        """
+        Check if the requested discharge rate is within the limits of the battery.
+        Returns True if within limits, False otherwise.
+        """
+        
+        c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
+
+        soc_end = self.get_soc_at_energy(max(0,self._stored_energy_wh - wh_des))
+        c_avail_end = self.max_c_rate * self.discharge_soc_degradation.getValue(soc_end)
+
+        max_amps = self.c_rate_to_current((c_avail_start + c_avail_end) /2.0)
+        cur_amps = wh_des/self.time_obj.get_dt().total_seconds() / self.BATT_V
+
+        return cur_amps <= max_amps
 
     def get_max_charge_rate_wh(self):
         #Caution: This may return a larger energy than available to provide to the battery
@@ -278,6 +294,22 @@ class SolarBattery(PowerDevice):
 
         return wh-1
     
+    def is_charge_rate_within_limits(self, wh_des):
+        """
+        Check if the requested charge rate is within the limits of the battery.
+        Returns True if within limits, False otherwise.
+        """
+        
+        c_avail_start = self.max_c_rate * self.discharge_soc_degradation.getValue(self.soc)
+
+        soc_end = self.get_soc_at_energy(min(self._stored_energy_wh,self._stored_energy_wh + wh_des))
+        c_avail_end = self.max_c_rate * self.discharge_soc_degradation.getValue(soc_end)
+
+        max_amps = self.c_rate_to_current((c_avail_start + c_avail_end) /2.0)
+        cur_amps = wh_des/self.time_obj.get_dt().total_seconds() / self.BATT_V
+
+        return cur_amps <= max_amps
+    
     def __discharge_battery_wh(self, wh_des):
         #Discharge the battery, returning the energy (wh) provided
         self.__reset_ts()
@@ -287,7 +319,10 @@ class SolarBattery(PowerDevice):
         avail_stored_wh = self._stored_energy_wh
         avail_export_wh = avail_stored_wh * self.discharge_eff
 
-        avail_export_arb_wh = min(avail_export_wh, self.get_max_discharge_rate_wh())
+        if self.is_discharge_rate_within_limits(avail_export_wh):
+            avail_export_arb_wh = avail_export_wh
+        else:
+            avail_export_arb_wh = min(avail_export_wh, self.get_max_discharge_rate_wh())
 
         wh_exported = min(avail_export_arb_wh, wh_des)
 
@@ -313,7 +348,10 @@ class SolarBattery(PowerDevice):
         avail_sync_wh = self.usable_energy_wh - self._stored_energy_wh
         avail_import_wh = avail_sync_wh / self.charge_eff
 
-        avail_import_arb_wh = min(avail_import_wh, self.get_max_charge_rate_wh())
+        if self.is_charge_rate_within_limits(avail_import_wh):
+            avail_import_arb_wh = avail_import_wh
+        else:
+            avail_import_arb_wh = min(avail_import_wh, self.get_max_charge_rate_wh())
 
         wh_imported = min(avail_import_arb_wh, wh_des)
 
