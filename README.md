@@ -36,7 +36,7 @@ python app.py
 Set the following environment variables:
 - `ENPHASE_API_KEY`: Your Enphase API key
 - `ENPHASE_CLIENT_ID`: Your Enphase Client ID
-- `ENPHASE_SAVINGS_CALCULATOR_SECRET`: A secret key for Flask session management
+- `ENPHASE_SAVINGS_CALCULATOR_SECRET`: A secret key for Flask session management. Set this to anything you like.
 
 
 ### Usage
