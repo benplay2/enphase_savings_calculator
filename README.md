@@ -4,7 +4,7 @@ Tool to help determine savings from adding components to a home monitored by Enp
 
 For example:
 - How much money would be saved by adding a battery to a solar system?
-- How much money would be saved by adding solar panels
+- How much money would be saved by adding solar panels?
 
 Prior logged data from Enphase is used to simulate savings.
 
@@ -13,6 +13,31 @@ To run:
 ./venv/Scripts/activate
 python app.py
 ```
+
+### Setup Requirements
+- Python 3.8 or higher
+- Pip (Python package manager)
+- Virtual environment (`venv`)
+
+#### Installation Steps:
+1. Clone the repository
+2. Create and activate a virtual environment:
+   ```
+   python -m venv venv
+   ./venv/Scripts/activate  # On Windows
+   source venv/bin/activate # On macOS/Linux
+   ```
+3. Install required Python packages:
+   ```
+   pip install -r requirements.txt
+   ```
+
+#### Environment Variables:
+Set the following environment variables:
+- `ENPHASE_API_KEY`: Your Enphase API key
+- `ENPHASE_CLIENT_ID`: Your Enphase Client ID
+- `ENPHASE_SAVINGS_CALCULATOR_SECRET`: A secret key for Flask session management
+
 
 ### Usage
 1. Open a web browser to `http://localhost:5000/`
