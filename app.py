@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file
 from db_models import db, User, SystemDetails, HistoricalData
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
@@ -6,6 +6,8 @@ import json
 import os
 from datetime import datetime, timedelta
 import pandas as pd
+
+import copy
 
 import enphase_api
 import solar_sim
@@ -24,9 +26,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 port = 5000
 
 app.config["UPLOAD_FOLDER"] = "uploads"  # Directory to save uploaded files
+app.config["REPORTS_FOLDER"] = "reports"  # Directory to save generated reports
 
 # Ensure upload folder exists
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["REPORTS_FOLDER"], exist_ok=True)
 
 # db = SQLAlchemy(app)
 db.init_app(app)  # Bind SQLAlchemy to the Flask app
@@ -34,6 +38,8 @@ db.init_app(app)  # Bind SQLAlchemy to the Flask app
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+app.user_files = {}
 
 # def run_simulation(param):
 #     # Example simulation: random number generation based on input
@@ -406,6 +412,9 @@ def simulate():
         # Get submitted form values
         data = request.form.to_dict()
 
+        # Add system_name explicitly to the data dictionary
+        data['system_name'] = sys_details.name
+
         data['start_datetime'] = datetime.strptime(data['start_datetime'], "%Y-%m-%dT%H:%M")
         data['end_datetime'] = datetime.strptime(data['end_datetime'], "%Y-%m-%dT%H:%M")
 
@@ -474,8 +483,6 @@ def simulate():
         sum_generated_energy_kwh = solar_array.lifetime_energy_wh / 1000
         batt_throughput_kwh = battery.throughput_wh / 1000
 
-        sim_out.to_csv('simulation_output.csv', index=False)
-
         sum_import_kwh = sim_out['imported_wh'].sum()/1000
         sum_export_kwh = sim_out['exported_wh'].sum()/1000
         sim_consumed_kwh = sim_out['consumed_wh'].sum()/1000
@@ -527,10 +534,10 @@ def simulate():
         #simulate again without any solar panels, without battery. Use to get comparison values
         grid.reset_memory()
         #Note: initial credits are 0
-        no_solar_array = solar_array
+        no_solar_array = copy.copy(solar_array)
         no_solar_array.panel_num = 0
         no_solar_array.reset_memory()
-        no_battery = battery
+        no_battery = copy.copy(battery)
         no_battery.usable_energy_kwh = 0
         no_battery.reset_memory()
         controller = solar_sim.SimController(panels=no_solar_array, battery=no_battery, grid=grid)
@@ -601,7 +608,41 @@ def simulate():
             "credits_available": sim_out["credits_available"].tolist(),
         }
 
-        return render_template("simulation_form.html", err_msg=None, results=json.dumps(results_aggregated), **data)
+        # Change the generated report filename to be dynamic
+        current_timestamp = datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
+        start_date = data['start_datetime'].strftime("%m.%d.%Y")
+        end_date = data['end_datetime'].strftime("%m.%d.%Y")
+        filename = f"{current_timestamp}_from_{start_date}_to_{end_date}_{solar_array.panel_num}panels_{battery.usable_energy_kwh}kWh.csv"
+        file_path = os.path.join(app.config["REPORTS_FOLDER"], filename)
+
+        # Save the file path and user ID in a dictionary for access control
+        if not hasattr(app, 'user_files'):
+            app.user_files = {}
+        app.user_files[current_user.id] = app.user_files.get(current_user.id, []) + [filename]
+
+        sim_out.to_csv(file_path, index=False)
+
+        # Add metadata to the top of the CSV file
+        metadata = [
+            f"Number of Panels: {solar_array.panel_num}",
+            f"Battery Size (kWh): {battery.usable_energy_kwh}",
+            f"Date Range: {data['start_datetime']} to {data['end_datetime']}",
+            f"Total Imported Energy (kWh): {results_aggregated['sum_import_kwh']}",
+            f"Total Exported Energy (kWh): {results_aggregated['sum_export_kwh']}",
+            f"Total Consumption (kWh): {results_aggregated['sim_consumed_kwh']}",
+            f"Total Production (kWh): {results_aggregated['sim_produced_kwh']}",
+            f"Grid Dependence (%): {results_aggregated['grid_dependence']:.2f}",
+            f"Solar Savings ($): {results_aggregated['solar_savings_dollars']:.2f}",
+            f"Battery Throughput (kWh): {results_aggregated['batt_throughput_kwh']:.2f}",
+        ]
+
+        with open(file_path, 'r') as original_file:
+            original_content = original_file.read()
+
+        with open(file_path, 'w') as updated_file:
+            updated_file.write('\n'.join(metadata) + '\n\n' + original_content)
+
+        return render_template("simulation_form.html", err_msg=None, results=json.dumps(results_aggregated), filename=filename, **data)
     
     
     
@@ -711,6 +752,24 @@ def enphase_token():
     new_token_dict = enphase_api.authorize(code, token_dictionary=get_token_dict(current_user))
     update_user_token_info(current_user, new_token_dict)
     return redirect(url_for('dashboard'))
+
+@app.route('/download_csv', methods=['GET'])
+@login_required
+def download_csv():
+    filename = request.args.get('filename', None)
+    if filename is None:
+        return "{\"Error\":\"Filename not specified\"}", 400
+
+    # Check if the file belongs to the current user
+    user_files = app.user_files.get(current_user.id, [])
+    if filename not in user_files:
+        return "{\"Error\":\"Unauthorized access\"}", 403
+
+    file_path = os.path.join(app.config["REPORTS_FOLDER"], filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    else:
+        return "{\"Error\":\"File not found\"}", 404
 
 if __name__ == '__main__':
     with app.app_context():

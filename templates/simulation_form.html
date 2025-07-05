@@ -173,9 +173,14 @@
         </div>
 
         <div class="text-center mt-4">
-            <button type="submit" class="btn btn-primary mt-3">Simulate</button>
+            <button type="submit" class="btn btn-primary mt-3" id="simulate-button">Simulate</button>
         </div>
     </form>
+
+    <!-- Running Simulation Message -->
+    <div id="running-message" class="text-center mt-4" style="display: none;">
+        <p class="text-info">Simulation is running, please wait...</p>
+    </div>
 
     <!-- Results Section -->
     <div id="error_txt" class="mt-4">
@@ -196,10 +201,21 @@
 
         <div id="stacked_timeseries_plot" style="min-height: 600px; height: 80vh;"></div>
 
+        <!-- Add a download button for the CSV file -->
+        <div class="text-center mt-4">
+            <a href="{{ url_for('download_csv', filename=filename) }}" class="btn btn-success">Download Simulation Output (CSV)</a>
+        </div>
+
         {% endif %}
     </div>
 
     <script>
+        // Show running message when the form is submitted
+        document.getElementById('simulation-form').addEventListener('submit', function () {
+            document.getElementById('simulate-button').disabled = true;
+            document.getElementById('running-message').style.display = 'block';
+        });
+
         // Plot of results
         // Parse the results dictionary passed from Flask
         const results = JSON.parse('{{ results | safe }}');
