@@ -1,4 +1,4 @@
-# enphase_savings_calculator
+Enphase savings calculator
  
 Tool to help determine savings from adding components to a home monitored by Enphase.
 
