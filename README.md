@@ -1,6 +1,6 @@
 Enphase savings calculator
  
-Tool to help determine savings from adding components to a home monitored by Enphase.
+Tool to help determine savings from adding or modifying components to a home monitored by Enphase.
 
 For example:
 - How much money would be saved by adding a battery to a solar system?
